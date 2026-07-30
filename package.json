@@ -1,0 +1,29 @@
+{
+  "name": "sistema-chepola",
+  "version": "1.0.0",
+  "description": "Sistema Chepola - API REST con Express",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "dev:all": "concurrently -n API,WEB -c cyan,magenta \"npm run dev\" \"npm run dev --prefix frontend\""
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.22.5",
+    "node-forge": "^1.4.0",
+    "pdfkit": "^0.19.1",
+    "qrcode": "^1.5.4",
+    "soap": "^1.10.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3",
+    "nodemon": "^3.1.4"
+  }
+}

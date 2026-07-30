@@ -1,0 +1,124 @@
+const PDFDocument = require('pdfkit');
+
+const NEGOCIO_NOMBRE = process.env.TICKET_NEGOCIO_NOMBRE || 'Cafetería';
+
+const MM_TO_PT = 2.83465;
+const ANCHO = Math.round(80 * MM_TO_PT); // ticket de 80mm, ancho típico de impresora térmica
+const MARGEN = 14;
+const ANCHO_UTIL = ANCHO - MARGEN * 2;
+
+const formatFecha = (fecha) =>
+  fecha ? new Date(fecha).toLocaleString('es-AR', { hour12: false }) : '—';
+const formatMoneda = (n) => `$${Number(n).toFixed(2)}`;
+
+const linea = (doc) => {
+  doc.moveTo(MARGEN, doc.y).lineTo(ANCHO - MARGEN, doc.y).stroke();
+  doc.moveDown(0.5);
+};
+
+const imprimirItem = (doc, item) => {
+  doc.font('Helvetica-Bold').fontSize(8.5).text(item.nombre, MARGEN, doc.y, { width: ANCHO_UTIL });
+  doc.font('Helvetica').fontSize(8);
+  const y = doc.y;
+  const detalle = `${item.cantidad} x ${formatMoneda(item.precio_unitario)}`;
+  doc.text(detalle, MARGEN, y, { width: ANCHO_UTIL * 0.55 });
+  doc.text(formatMoneda(item.subtotal), MARGEN, y, { width: ANCHO_UTIL, align: 'right' });
+  doc.moveDown(0.4);
+};
+
+// Genera el PDF del ticket (comprobante interno, no fiscal) de una silla/pedido y lo escribe
+// directamente en el stream de la respuesta HTTP. La altura de página se estima según la
+// cantidad de productos; si algún ticket es más largo de lo previsto, pdfkit agrega otra página.
+const generarTicketPedido = (res, { pedido, items, sillaNumero, sillasTotales }) => {
+  const alto = Math.max(320, 210 + items.length * 30);
+  const doc = new PDFDocument({ size: [ANCHO, alto], margin: MARGEN });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="ticket-pedido-${pedido.id}.pdf"`);
+  doc.pipe(res);
+
+  doc.font('Helvetica-Bold').fontSize(13).text(NEGOCIO_NOMBRE, { align: 'center' });
+  doc.font('Helvetica').fontSize(7.5).text('Comprobante interno, no válido como factura', { align: 'center' });
+  doc.moveDown(0.6);
+  linea(doc);
+
+  doc.fontSize(9);
+  doc.text(`Mesa: ${pedido.numero_mesa_grupo ?? pedido.numero_mesa}`);
+  doc.text(`Silla: ${sillaNumero} de ${sillasTotales}`);
+  doc.text(`Pedido #${pedido.id}`);
+  doc.text(`Apertura: ${formatFecha(pedido.fecha_creacion)}`);
+  doc.text(`Cierre:   ${formatFecha(pedido.fecha_cierre)}`);
+  doc.moveDown(0.5);
+  linea(doc);
+
+  if (!items.length) {
+    doc.fontSize(9).text('Sin productos.');
+  } else {
+    for (const item of items) imprimirItem(doc, item);
+  }
+
+  doc.moveDown(0.3);
+  linea(doc);
+
+  doc.font('Helvetica-Bold').fontSize(11).text(`TOTAL: ${formatMoneda(pedido.total)}`, { align: 'right' });
+
+  doc.moveDown(1);
+  doc.font('Helvetica').fontSize(8).text('¡Gracias por su visita!', { align: 'center' });
+
+  doc.end();
+};
+
+// Genera el PDF del ticket consolidado de toda la cuenta de una mesa (todas las sillas de una
+// misma sesión), agrupando los productos por silla y con el total general al final.
+const generarTicketCuenta = (res, { mesa, pedidos, items }) => {
+  const alto = Math.max(360, 220 + pedidos.length * 40 + items.length * 26);
+  const doc = new PDFDocument({ size: [ANCHO, alto], margin: MARGEN });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="ticket-mesa-${mesa.id}.pdf"`);
+  doc.pipe(res);
+
+  doc.font('Helvetica-Bold').fontSize(13).text(NEGOCIO_NOMBRE, { align: 'center' });
+  doc.font('Helvetica').fontSize(7.5).text('Comprobante interno, no válido como factura', { align: 'center' });
+  doc.moveDown(0.6);
+  linea(doc);
+
+  doc.fontSize(9);
+  doc.text(`Mesa: ${mesa.numero_mesa_grupo ?? mesa.numero_mesa}`);
+  doc.text(`Sillas: ${pedidos.length}`);
+  doc.moveDown(0.5);
+  linea(doc);
+
+  let granTotal = 0;
+  pedidos.forEach((pedido, idx) => {
+    const itemsPedido = items.filter((i) => i.pedido_id === pedido.id);
+    granTotal += Number(pedido.total);
+
+    doc.font('Helvetica-Bold').fontSize(9.5).text(`Silla ${idx + 1}`);
+    doc.font('Helvetica').fontSize(7.5).text(
+      `Apertura ${formatFecha(pedido.fecha_creacion)}  ·  Cierre ${formatFecha(pedido.fecha_cierre)}`
+    );
+    doc.moveDown(0.3);
+
+    if (!itemsPedido.length) {
+      doc.fontSize(8.5).text('Sin productos.');
+    } else {
+      for (const item of itemsPedido) imprimirItem(doc, item);
+    }
+
+    doc.font('Helvetica-Oblique').fontSize(8).text(`Subtotal silla: ${formatMoneda(pedido.total)}`, { align: 'right' });
+    doc.moveDown(0.5);
+    if (idx < pedidos.length - 1) linea(doc);
+  });
+
+  doc.moveDown(0.2);
+  linea(doc);
+  doc.font('Helvetica-Bold').fontSize(12).text(`TOTAL: ${formatMoneda(granTotal)}`, { align: 'right' });
+
+  doc.moveDown(1);
+  doc.font('Helvetica').fontSize(8).text('¡Gracias por su visita!', { align: 'center' });
+
+  doc.end();
+};
+
+module.exports = { generarTicketPedido, generarTicketCuenta };
