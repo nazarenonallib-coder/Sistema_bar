@@ -3,6 +3,7 @@ const Pedido = require('../models/pedidoModel');
 const afipService = require('../services/afipService');
 const afipConfig = require('../config/afipConfig');
 const { generarFacturaPDF } = require('../services/facturaPdfService');
+const logger = require('../utils/logger');
 
 const TIPOS_POR_CONDICION = {
   monotributista: [{ tipo_comprobante: 11, nombre: 'Factura C' }],
@@ -36,6 +37,7 @@ const getHistorial = async (req, res) => {
       total_paginas: Math.max(1, Math.ceil(total / limit)),
     });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -49,6 +51,7 @@ const getOne = async (req, res) => {
     if (!factura) return res.status(404).json({ error: `Factura con id ${id} no encontrada.` });
     res.json(factura);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -65,8 +68,11 @@ const getPdf = async (req, res) => {
 
     const pedidos = await Pedido.getPedidosSesion(factura.mesa_id, factura.sesion_apertura);
     const items = await Pedido.getItemsByPedidoIds(pedidos.map((p) => p.id));
-    await generarFacturaPDF(res, factura, { items });
+    // Se accede a esta ruta desde el historial (no desde el cierre de cuenta recién hecho), así
+    // que cualquier impresión acá es una reimpresión de archivo: se marca DUPLICADO.
+    await generarFacturaPDF(res, factura, { items, copia: 'DUPLICADO' });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -95,6 +101,7 @@ const reintentar = async (req, res) => {
       await Factura.updateResultado(id, resultado);
       return res.json({ message: 'Factura reintentada.', factura: await Factura.getById(id) });
     } catch (err) {
+      logger.error(`${req.method} ${req.originalUrl} - ARCA rechazó el reintento de la factura ${id}: ${err.message}`, { stack: err.stack });
       await Factura.updateResultado(id, {
         estado: 'error',
         numero: null,
@@ -108,6 +115,7 @@ const reintentar = async (req, res) => {
       return res.status(502).json({ error: 'No se pudo emitir la factura ante ARCA.', detail: err.message });
     }
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -116,6 +124,7 @@ const getEstadoAfip = async (req, res) => {
   try {
     res.json(await afipService.estadoServicio());
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(502).json({ error: 'No se pudo consultar el estado de ARCA.', detail: err.message });
   }
 };

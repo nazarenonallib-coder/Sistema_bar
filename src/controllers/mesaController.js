@@ -6,6 +6,7 @@ const Insumo = require('../models/insumoModel');
 const Factura = require('../models/facturaModel');
 const afipService = require('../services/afipService');
 const afipConfig = require('../config/afipConfig');
+const logger = require('../utils/logger');
 
 const METODOS_PAGO_VALIDOS = ['efectivo', 'tarjeta_debito', 'tarjeta_credito', 'transferencia', 'otro'];
 
@@ -17,6 +18,7 @@ const getAll = async (req, res) => {
   try {
     res.json(await Mesa.getAll(salon_id));
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -37,6 +39,7 @@ const create = async (req, res) => {
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY')
       return res.status(400).json({ error: `Ya existe la mesa número ${numero_mesa}.` });
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -46,7 +49,7 @@ const cerrarCuenta = async (req, res) => {
   if (isNaN(id))
     return res.status(400).json({ error: 'El parámetro "id" debe ser un entero válido.' });
 
-  const { metodo_pago, tipo_comprobante, doc_tipo, doc_nro, condicion_iva_receptor_id, receptor_nombre } = req.body;
+  const { metodo_pago, tipo_comprobante, doc_tipo, doc_nro, condicion_iva_receptor_id, receptor_nombre, domicilio_receptor } = req.body;
 
   if (!METODOS_PAGO_VALIDOS.includes(metodo_pago))
     return res.status(400).json({ error: `"metodo_pago" debe ser uno de: ${METODOS_PAGO_VALIDOS.join(', ')}.` });
@@ -128,6 +131,7 @@ const cerrarCuenta = async (req, res) => {
         doc_nro: String(doc_nro),
         condicion_iva_receptor_id,
         receptor_nombre: receptor_nombre || null,
+        domicilio_receptor: domicilio_receptor || null,
         importe_total: totalAcumulado,
         entorno: afipConfig.entorno,
         creado_por: req.usuario?.sub ?? null,
@@ -137,6 +141,7 @@ const cerrarCuenta = async (req, res) => {
     await conn.commit();
   } catch (err) {
     await conn.rollback();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     return res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   } finally {
     conn.release();
@@ -156,6 +161,7 @@ const cerrarCuenta = async (req, res) => {
       });
       await Factura.updateResultado(factura.id, resultado);
     } catch (err) {
+      logger.error(`${req.method} ${req.originalUrl} - ARCA rechazó la factura ${factura.id} (mesa ${id}): ${err.message}`, { stack: err.stack });
       await Factura.updateResultado(factura.id, {
         estado: 'error',
         numero: null,
@@ -198,6 +204,7 @@ const confirmarTicket = async (req, res) => {
 
     res.json({ message: `Mesa ${mesa.numero_mesa} liberada.`, mesa_id: id });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -221,6 +228,7 @@ const remove = async (req, res) => {
     await Mesa.remove(id);
     res.json({ message: `Mesa ${mesa.numero_mesa} eliminada correctamente.` });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -260,6 +268,7 @@ const getPedidosActivos = async (req, res) => {
       total_acumulado: Math.round(total_acumulado * 100) / 100,
     });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -281,6 +290,7 @@ const updatePosicion = async (req, res) => {
     await Mesa.updatePosicion(id, pos_x, pos_y);
     res.json({ ...mesa, pos_x, pos_y });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -300,6 +310,7 @@ const updateColor = async (req, res) => {
     await Mesa.updateColor(id, color_libre ?? null, color_ocupado ?? null);
     res.json({ ...mesa, color_libre: color_libre ?? null, color_ocupado: color_ocupado ?? null });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -323,6 +334,7 @@ const updateTamano = async (req, res) => {
     await Mesa.updateTamano(id, tamano);
     res.json({ ...mesa, tamano });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -352,6 +364,7 @@ const combinar = async (req, res) => {
   } catch (err) {
     const status = CODIGOS_COMBINAR[err.code];
     if (status) return res.status(status).json({ error: err.message });
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -367,6 +380,7 @@ const separar = async (req, res) => {
   } catch (err) {
     const status = CODIGOS_COMBINAR[err.code];
     if (status) return res.status(status).json({ error: err.message });
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
