@@ -1,6 +1,6 @@
 {
   "name": "sistema-chepola",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Sistema Chepola - API REST con Express",
   "main": "src/server.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "node-forge": "^1.4.0",
     "pdfkit": "^0.19.1",
     "qrcode": "^1.5.4",
-    "soap": "^1.10.0"
+    "soap": "^1.10.0",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",

@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS facturas (
   doc_nro                   VARCHAR(20) NOT NULL DEFAULT '0',
   condicion_iva_receptor_id SMALLINT UNSIGNED NOT NULL,    -- código ARCA (5=Consumidor Final, 1=RI, 6=Monotributo, etc.)
   receptor_nombre           VARCHAR(255) NULL,             -- opcional, solo para mostrar en el PDF / registro interno
+  domicilio_receptor        VARCHAR(255) NULL,             -- opcional, idem receptor_nombre
 
   importe_neto              DECIMAL(10,2) NOT NULL DEFAULT 0,
   importe_iva               DECIMAL(10,2) NOT NULL DEFAULT 0,
