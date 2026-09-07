@@ -49,7 +49,7 @@ export default function Sidebar({ vista, setVista, usuario, onLogout }) {
       {/* Brand */}
       <div className="px-5 py-6 border-b border-slate-700">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Sistema</p>
-        <h1 className="text-xl font-black text-white">Chepola</h1>
+        <h1 className="text-xl font-black text-white">Chapola</h1>
       </div>
 
       {/* Nav */}

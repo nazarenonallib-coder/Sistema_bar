@@ -1,5 +1,6 @@
 const Mesa = require('../models/mesaModel');
 const Silla = require('../models/sillaModel');
+const logger = require('../utils/logger');
 
 // Posición inicial de una silla nueva: pegada al borde superior de la mesa, escalonada para que
 // no quede tapando a las anteriores. El dueño la reacomoda arrastrándola en modo edición.
@@ -26,6 +27,7 @@ const create = async (req, res) => {
     const silla = await Silla.create(mesa_id, pos_x, pos_y);
     res.status(201).json(silla);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -47,6 +49,7 @@ const updatePosicion = async (req, res) => {
     await Silla.updatePosicion(id, pos_x, pos_y);
     res.json({ ...silla, pos_x, pos_y });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -64,6 +67,7 @@ const remove = async (req, res) => {
     await Silla.remove(id);
     res.json({ message: 'Silla eliminada correctamente.' });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

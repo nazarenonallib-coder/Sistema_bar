@@ -3,6 +3,7 @@ const Mesa = require('../models/mesaModel');
 const Pedido = require('../models/pedidoModel');
 const Producto = require('../models/productoModel');
 const Insumo = require('../models/insumoModel');
+const logger = require('../utils/logger');
 
 const create = async (req, res) => {
   const { mesa_id } = req.body;
@@ -26,6 +27,7 @@ const create = async (req, res) => {
 
     res.status(201).json(pedido);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -60,6 +62,7 @@ const _resolverYAgregarProductos = async (pedido_id, productosConDatos, res) => 
     });
   } catch (err) {
     await conn.rollback();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   } finally {
     conn.release();
@@ -108,6 +111,7 @@ const addProductos = async (req, res) => {
     }
   } catch (err) {
     conn.release();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     return res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
   conn.release();
@@ -157,6 +161,7 @@ const addProductosPorNombre = async (req, res) => {
     }
   } catch (err) {
     conn.release();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     return res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
   conn.release();
@@ -214,6 +219,7 @@ const cerrarPedido = async (req, res) => {
     });
   } catch (err) {
     await conn.rollback();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   } finally {
     conn.release();
@@ -254,6 +260,7 @@ const removePedido = async (req, res) => {
     res.json({ message: `Pedido ${id} eliminado.`, pedido_id: id, mesa_liberada: mesaLiberada });
   } catch (err) {
     await conn.rollback();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   } finally {
     conn.release();
@@ -293,6 +300,7 @@ const removeItem = async (req, res) => {
     res.json({ message: `Producto quitado del pedido ${pedido_id}.`, pedido_id, item_id });
   } catch (err) {
     await conn.rollback();
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   } finally {
     conn.release();
@@ -319,6 +327,7 @@ const marcarItemEntregado = async (req, res) => {
     await Pedido.setItemEntregado(item_id, entregado);
     res.json({ message: 'Producto actualizado.', pedido_id, item_id, entregado });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -341,6 +350,7 @@ const marcarPedidoEntregado = async (req, res) => {
     await Pedido.setPedidoEntregado(id, entregado);
     res.json({ message: 'Pedido actualizado.', pedido_id: id, entregado });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -359,6 +369,7 @@ const getHistorial = async (req, res) => {
       total_paginas: Math.max(1, Math.ceil(total / limit)),
     });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -376,6 +387,7 @@ const getOne = async (req, res) => {
     const items = await Pedido.getItems(id);
     res.json({ pedido, items });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

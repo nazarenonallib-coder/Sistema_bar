@@ -1,12 +1,13 @@
 const { Router } = require('express');
 const {
-  getConfig, getHistorial, getOne, getPdf, reintentar, getEstadoAfip,
+  getConfig, getHistorial, getOne, getPdf, reintentar, getEstadoAfip, getReporte,
 } = require('../controllers/facturaController');
 
 const router = Router();
 
 router.get('/config', getConfig);
 router.get('/estado-afip', getEstadoAfip);
+router.get('/reporte', getReporte);
 router.get('/', getHistorial);
 router.get('/:id', getOne);
 router.get('/:id/pdf', getPdf);

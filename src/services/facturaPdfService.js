@@ -15,6 +15,14 @@ const CONDICION_IVA_EMISOR_LABEL = {
   responsable_inscripto: 'IVA Responsable Inscripto',
 };
 const DOC_TIPO_LABEL = { 80: 'CUIT', 96: 'DNI', 99: 'Consumidor Final' };
+// Mismos códigos ARCA que CONDICIONES_IVA_RECEPTOR en CierreCuentaModal.jsx.
+const CONDICION_IVA_RECEPTOR_LABEL = {
+  5: 'Consumidor Final',
+  1: 'Responsable Inscripto',
+  6: 'Monotributista',
+  4: 'Exento',
+  7: 'No Categorizado',
+};
 
 const formatFecha = (fecha) => (fecha ? new Date(fecha).toLocaleString('es-AR', { hour12: false }) : '—');
 const formatMoneda = (n) => `$${Number(n).toFixed(2)}`;
@@ -51,10 +59,12 @@ const armarUrlQr = (factura) => {
 // Genera el PDF fiscal (con CAE y QR) de una cuenta ya facturada y lo escribe en el stream de la
 // respuesta HTTP. Mismo ancho térmico 80mm que el ticket interno, para imprimirse en la misma
 // impresora de mostrador que ya usa el local.
-const generarFacturaPDF = async (res, factura, { items = [] } = {}) => {
+// `copia`: 'ORIGINAL' para la impresión al cerrar la cuenta, 'DUPLICADO' cuando se reimprime desde
+// el historial (ver facturaController.getPdf vs ticketController.ticketCuentaMesa).
+const generarFacturaPDF = async (res, factura, { items = [], copia = 'ORIGINAL' } = {}) => {
   const qrBuffer = await QRCode.toBuffer(armarUrlQr(factura), { margin: 1, width: 130 });
 
-  const alto = Math.max(430, 300 + items.length * 26);
+  const alto = Math.max(520, 390 + items.length * 26);
   const doc = new PDFDocument({ size: [ANCHO, alto], margin: MARGEN });
 
   res.setHeader('Content-Type', 'application/pdf');
@@ -62,9 +72,17 @@ const generarFacturaPDF = async (res, factura, { items = [] } = {}) => {
   doc.pipe(res);
 
   doc.font('Helvetica-Bold').fontSize(13).text(NEGOCIO_NOMBRE, { align: 'center' });
-  doc.font('Helvetica').fontSize(8).text(`CUIT: ${afipConfig.cuit}`, { align: 'center' });
+  doc.font('Helvetica').fontSize(8);
+  if (afipConfig.razonSocial) doc.text(afipConfig.razonSocial, { align: 'center' });
+  doc.text(`CUIT: ${afipConfig.cuit}`, { align: 'center' });
   doc.text(CONDICION_IVA_EMISOR_LABEL[afipConfig.condicionIvaEmisor] || '', { align: 'center' });
+  if (afipConfig.domicilioComercial) doc.text(afipConfig.domicilioComercial, { align: 'center' });
+  if (afipConfig.ingresosBrutos) doc.text(`Ingresos Brutos: ${afipConfig.ingresosBrutos}`, { align: 'center' });
+  if (afipConfig.inicioActividades) {
+    doc.text(`Inicio de actividades: ${new Date(afipConfig.inicioActividades).toLocaleDateString('es-AR')}`, { align: 'center' });
+  }
   doc.moveDown(0.4);
+  doc.font('Helvetica-Bold').fontSize(9).text(copia.toUpperCase(), { align: 'center' });
   doc
     .font('Helvetica-Bold')
     .fontSize(10)
@@ -72,17 +90,17 @@ const generarFacturaPDF = async (res, factura, { items = [] } = {}) => {
   doc
     .font('Helvetica')
     .fontSize(9)
-    .text(
-      `${String(factura.punto_venta).padStart(4, '0')}-${String(factura.numero).padStart(8, '0')}`,
-      { align: 'center' }
-    );
+    .text(`Punto de Venta: ${String(factura.punto_venta).padStart(4, '0')}`, { align: 'center' })
+    .text(`Comprobante N°: ${String(factura.numero).padStart(8, '0')}`, { align: 'center' });
   doc.moveDown(0.5);
   linea(doc);
 
   doc.fontSize(8.5);
   doc.text(`Fecha: ${formatFecha(factura.fecha_emision)}`);
   doc.text(`Receptor: ${DOC_TIPO_LABEL[factura.doc_tipo] || factura.doc_tipo} ${factura.doc_nro}`);
+  doc.text(`Condición IVA: ${CONDICION_IVA_RECEPTOR_LABEL[factura.condicion_iva_receptor_id] || factura.condicion_iva_receptor_id}`);
   if (factura.receptor_nombre) doc.text(factura.receptor_nombre);
+  if (factura.domicilio_receptor) doc.text(factura.domicilio_receptor);
   doc.moveDown(0.4);
   linea(doc);
 
@@ -100,8 +118,11 @@ const generarFacturaPDF = async (res, factura, { items = [] } = {}) => {
   }
 
   doc.fontSize(9);
+  // "Total sin impuestos nacionales" va siempre, incluso en Factura C: ahí coincide con el TOTAL
+  // porque el monotributista no discrimina IVA y este sistema no carga Otros Tributos (ImpTrib
+  // queda en 0, ver afipService.calcularImportes), pero el renglón igual tiene que figurar.
+  doc.text(`Total sin impuestos nacionales: ${formatMoneda(factura.importe_neto)}`, { align: 'right' });
   if (factura.tipo_comprobante !== 11) {
-    doc.text(`Neto: ${formatMoneda(factura.importe_neto)}`, { align: 'right' });
     doc.text(`IVA: ${formatMoneda(factura.importe_iva)}`, { align: 'right' });
   }
   doc.font('Helvetica-Bold').fontSize(11).text(`TOTAL: ${formatMoneda(factura.importe_total)}`, { align: 'right' });

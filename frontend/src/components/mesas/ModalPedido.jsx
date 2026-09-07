@@ -18,6 +18,7 @@ export default function ModalPedido({ mesa, productos, onClose, onMesaUpdate, ad
   const [ticketBusy, setTicketBusy]   = useState(false)
   const [showCierreCuenta, setShowCierreCuenta] = useState(false)
   const [facturaInfo, setFacturaInfo] = useState(null)
+  const [comandaBusy, setComandaBusy] = useState(false)
 
   const ticketCuentaMesa = () => ({
     titulo: 'Cuenta cerrada',
@@ -236,6 +237,19 @@ export default function ModalPedido({ mesa, productos, onClose, onMesaUpdate, ad
     prompt?.onDismiss?.()
   }
 
+  // La comanda (para cocina/barra) se puede imprimir en cualquier momento con la cuenta abierta,
+  // a diferencia del ticket que solo está disponible al cerrar silla/cuenta.
+  const handleImprimirComanda = async () => {
+    setComandaBusy(true)
+    try {
+      await imprimirTicket(`/api/mesas/${mesa.id}/comanda`)
+    } catch (err) {
+      addToast(err.message, 'error')
+    } finally {
+      setComandaBusy(false)
+    }
+  }
+
   const handleCerrarCuenta = () => setShowCierreCuenta(true)
 
   const handleConfirmarCierreCuenta = async (body) => {
@@ -421,9 +435,16 @@ export default function ModalPedido({ mesa, productos, onClose, onMesaUpdate, ad
                   </div>
 
                   <button onClick={handleNuevoPedido} disabled={submitting}
-                    className="w-full mb-4 border-2 border-dashed border-indigo-300 text-indigo-600
+                    className="w-full mb-3 border-2 border-dashed border-indigo-300 text-indigo-600
                       py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-50 transition disabled:opacity-50">
                     + Agregar otra silla a esta mesa
+                  </button>
+
+                  <button onClick={handleImprimirComanda} disabled={comandaBusy || !hayItems}
+                    className="w-full mb-4 border-2 border-amber-300 text-amber-700 bg-amber-50
+                      py-2.5 rounded-xl font-semibold text-sm hover:bg-amber-100 transition
+                      disabled:opacity-40 disabled:cursor-not-allowed">
+                    {comandaBusy ? '⏳ Generando…' : '🧾 Imprimir comanda (cocina/barra)'}
                   </button>
 
                   {/* Total */}

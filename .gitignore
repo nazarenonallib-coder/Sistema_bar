@@ -4,6 +4,7 @@ certs/
 .env.local
 .env.*.local
 *.log
+logs/
 npm-debug.log*
 .DS_Store
 dist/
@@ -13,3 +14,6 @@ datos.txt
 sistema_chepola_deploy.zip
 frontend/dist.zip
 .claude/
+*.key
+cert_prod.crt
+.env.*

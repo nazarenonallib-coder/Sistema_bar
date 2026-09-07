@@ -34,6 +34,7 @@ export default function CierreCuentaModal({ onConfirm, onCancel, submitting }) {
   const [docNro, setDocNro] = useState('')
   const [condicionIvaReceptorId, setCondicionIvaReceptorId] = useState(5)
   const [receptorNombre, setReceptorNombre] = useState('')
+  const [domicilioReceptor, setDomicilioReceptor] = useState('')
 
   useEffect(() => {
     api.getFacturaConfig()
@@ -61,6 +62,7 @@ export default function CierreCuentaModal({ onConfirm, onCancel, submitting }) {
       setDocNro('')
       setCondicionIvaReceptorId(5)
       setReceptorNombre('')
+      setDomicilioReceptor('')
     } else {
       setDocTipo(96)
     }
@@ -82,6 +84,7 @@ export default function CierreCuentaModal({ onConfirm, onCancel, submitting }) {
       doc_nro: puedeFacturar ? (consumidorFinal ? '0' : docNro.trim()) : null,
       condicion_iva_receptor_id: puedeFacturar ? condicionIvaReceptorId : null,
       receptor_nombre: puedeFacturar ? (receptorNombre.trim() || null) : null,
+      domicilio_receptor: puedeFacturar ? (domicilioReceptor.trim() || null) : null,
     })
   }
 
@@ -186,6 +189,12 @@ export default function CierreCuentaModal({ onConfirm, onCancel, submitting }) {
                       value={receptorNombre}
                       onChange={(e) => setReceptorNombre(e.target.value)}
                       placeholder="Nombre / Razón social (opcional)"
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={domicilioReceptor}
+                      onChange={(e) => setDomicilioReceptor(e.target.value)}
+                      placeholder="Domicilio (opcional)"
                       className="w-full border rounded-lg px-3 py-2 text-sm"
                     />
                   </div>

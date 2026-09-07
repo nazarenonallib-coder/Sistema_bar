@@ -120,6 +120,61 @@ const reintentar = async (req, res) => {
   }
 };
 
+const TIPO_COMPROBANTE_LABEL = { 1: 'Factura A', 6: 'Factura B', 11: 'Factura C' };
+const METODO_PAGO_LABEL = {
+  efectivo: 'Efectivo',
+  tarjeta_debito: 'Tarjeta débito',
+  tarjeta_credito: 'Tarjeta crédito',
+  transferencia: 'Transferencia',
+  otro: 'Otro',
+};
+
+// Escapa un valor para CSV: si contiene coma, comilla o salto de línea hay que encomillarlo y
+// duplicar las comillas internas (RFC 4180).
+const csvCell = (valor) => {
+  const texto = valor === null || valor === undefined ? '' : String(valor);
+  return /[",\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+};
+
+// Reporte contable de ventas ya facturadas (con CAE aprobado ante ARCA) en un rango de fechas.
+// Se descarga como CSV para que el dueño se lo pueda pasar al contador o abrir en Excel.
+const getReporte = async (req, res) => {
+  const { desde, hasta } = req.query;
+
+  try {
+    const facturas = await Factura.getVentasFacturadas(desde || null, hasta || null);
+
+    const encabezado = [
+      'Fecha', 'Comprobante', 'Punto de Venta', 'Número', 'Mesa', 'Método de Pago',
+      'Neto', 'IVA', 'Total', 'CAE',
+    ];
+    const filas = facturas.map((f) => [
+      csvCell(new Date(f.fecha_emision).toLocaleString('es-AR', { hour12: false })),
+      csvCell(TIPO_COMPROBANTE_LABEL[f.tipo_comprobante] || f.tipo_comprobante),
+      csvCell(String(f.punto_venta).padStart(4, '0')),
+      csvCell(String(f.numero).padStart(8, '0')),
+      csvCell(f.numero_mesa),
+      csvCell(METODO_PAGO_LABEL[f.metodo_pago] || f.metodo_pago),
+      csvCell(Number(f.importe_neto).toFixed(2)),
+      csvCell(Number(f.importe_iva).toFixed(2)),
+      csvCell(Number(f.importe_total).toFixed(2)),
+      csvCell(f.cae),
+    ].join(','));
+
+    const totalVentas = facturas.reduce((acc, f) => acc + Number(f.importe_total), 0);
+    filas.push(['', '', '', '', '', 'TOTAL', '', '', csvCell(totalVentas.toFixed(2)), ''].join(','));
+
+    const csv = '﻿' + [encabezado.join(','), ...filas].join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte-ventas-facturadas.csv"`);
+    res.send(csv);
+  } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
+  }
+};
+
 const getEstadoAfip = async (req, res) => {
   try {
     res.json(await afipService.estadoServicio());
@@ -129,4 +184,4 @@ const getEstadoAfip = async (req, res) => {
   }
 };
 
-module.exports = { getConfig, getHistorial, getOne, getPdf, reintentar, getEstadoAfip };
+module.exports = { getConfig, getHistorial, getOne, getPdf, reintentar, getEstadoAfip, getReporte };

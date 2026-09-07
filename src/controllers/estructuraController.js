@@ -1,4 +1,5 @@
 const Estructura = require('../models/estructuraModel');
+const logger = require('../utils/logger');
 
 const getAllBySalon = async (req, res) => {
   const salon_id = parseInt(req.query.salon_id, 10);
@@ -8,6 +9,7 @@ const getAllBySalon = async (req, res) => {
   try {
     res.json(await Estructura.getAllBySalon(salon_id));
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -24,6 +26,7 @@ const create = async (req, res) => {
     const estructura = await Estructura.create(salon_id, tipo, pos_x ?? 0, pos_y ?? 0);
     res.status(201).json(estructura);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -45,6 +48,7 @@ const updatePosicion = async (req, res) => {
     await Estructura.updatePosicion(id, pos_x, pos_y);
     res.json({ ...estructura, pos_x, pos_y });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -68,6 +72,7 @@ const update = async (req, res) => {
     await Estructura.update(id, { ancho, alto, rotacion });
     res.json({ ...estructura, ancho, alto, rotacion });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -85,6 +90,7 @@ const remove = async (req, res) => {
     await Estructura.remove(id);
     res.json({ message: `Estructura eliminada correctamente.` });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

@@ -1,4 +1,5 @@
 const Insumo = require('../models/insumoModel');
+const logger = require('../utils/logger');
 
 const validarCampos = ({ nombre, unidad, costo_unitario, disponible }) => {
   const errores = [];
@@ -33,6 +34,7 @@ const getAll = async (req, res) => {
     const insumos = await Insumo.getAll();
     res.json(insumos);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -57,6 +59,7 @@ const getOne = async (req, res) => {
     }
     return res.json(insumos);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -80,6 +83,7 @@ const create = async (req, res) => {
     });
     res.status(201).json(nuevo);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -111,6 +115,7 @@ const update = async (req, res) => {
     const actualizado = await Insumo.getById(id);
     res.json(actualizado);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -130,6 +135,7 @@ const remove = async (req, res) => {
         error: 'Este insumo está siendo usado en la receta de uno o más productos y no se puede eliminar. Marcalo como "no disponible" en su lugar.',
       });
     }
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

@@ -121,4 +121,55 @@ const generarTicketCuenta = (res, { mesa, pedidos, items }) => {
   doc.end();
 };
 
-module.exports = { generarTicketPedido, generarTicketCuenta };
+// Genera el PDF de la comanda (para cocina/barra) con los pedidos activos de una mesa: solo
+// nombres, cantidades y aclaraciones, sin precios ni totales, ya que no es un comprobante para
+// el cliente sino una lista de preparación. A diferencia del ticket, se puede pedir en cualquier
+// momento con la cuenta todavía abierta (no hace falta cerrar silla ni cuenta primero).
+const generarComandaMesa = (res, { mesa, pedidos, items }) => {
+  const alto = Math.max(300, 180 + pedidos.length * 30 + items.length * 24);
+  const doc = new PDFDocument({ size: [ANCHO, alto], margin: MARGEN });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="comanda-mesa-${mesa.id}.pdf"`);
+  doc.pipe(res);
+
+  doc.font('Helvetica-Bold').fontSize(14).text('COMANDA', { align: 'center' });
+  doc.font('Helvetica').fontSize(7.5).text(formatFecha(new Date()), { align: 'center' });
+  doc.moveDown(0.6);
+  linea(doc);
+
+  doc.font('Helvetica-Bold').fontSize(12).text(`Mesa: ${mesa.numero_mesa_grupo ?? mesa.numero_mesa}`);
+  doc.moveDown(0.4);
+  linea(doc);
+
+  pedidos.forEach((pedido, idx) => {
+    const itemsPedido = items.filter((i) => i.pedido_id === pedido.id);
+    if (!itemsPedido.length) return;
+
+    if (pedidos.length > 1) {
+      doc.font('Helvetica-Bold').fontSize(9.5).text(`Silla ${idx + 1}`);
+      doc.moveDown(0.2);
+    }
+
+    for (const item of itemsPedido) {
+      doc.font('Helvetica-Bold').fontSize(10).text(`${item.cantidad} x ${item.nombre}`, MARGEN, doc.y, { width: ANCHO_UTIL });
+      if (item.descripcion) {
+        doc.font('Helvetica-Oblique').fontSize(8).text(item.descripcion, MARGEN, doc.y, { width: ANCHO_UTIL });
+      }
+      doc.moveDown(0.4);
+    }
+
+    if (idx < pedidos.length - 1) doc.moveDown(0.2);
+  });
+
+  if (!items.length) {
+    doc.font('Helvetica').fontSize(9).text('Sin productos.');
+  }
+
+  doc.moveDown(0.5);
+  linea(doc);
+
+  doc.end();
+};
+
+module.exports = { generarTicketPedido, generarTicketCuenta, generarComandaMesa };

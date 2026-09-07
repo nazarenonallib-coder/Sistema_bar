@@ -31,6 +31,7 @@ module.exports = {
   razonSocial: process.env.AFIP_RAZON_SOCIAL || '',
   domicilioComercial: process.env.AFIP_DOMICILIO_COMERCIAL || '',
   inicioActividades: process.env.AFIP_INICIO_ACTIVIDADES || '',
+  ingresosBrutos: process.env.AFIP_INGRESOS_BRUTOS || '',
   wsaaWsdl: WSAA_URLS[entorno],
   wsfeWsdl: WSFE_URLS[entorno],
 };

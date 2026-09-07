@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import * as api from '../../api'
 import Spinner from '../Spinner'
 import DetallePedidoModal from './DetallePedidoModal'
+import ReporteVentasModal from './ReporteVentasModal'
 import { descargarTicket } from '../../utils/ticket'
 
 const formatHora = (fecha) =>
@@ -34,11 +35,16 @@ export default function HistorialPedidos({ addToast }) {
   const [descargandoId, setDescargandoId] = useState(null)
   const [page, setPage] = useState(1)
   const [totalPaginas, setTotalPaginas] = useState(1)
+  const [mostrarReporte, setMostrarReporte] = useState(false)
 
   const handleDescargarTicket = async (pedido) => {
     setDescargandoId(pedido.id)
     try {
-      await descargarTicket(`/api/pedidos/${pedido.id}/ticket`, `ticket-pedido-${pedido.id}.pdf`)
+      if (pedido.factura_id && pedido.factura_estado === 'aprobada') {
+        await descargarTicket(`/api/facturas/${pedido.factura_id}/pdf`, `factura-${pedido.factura_numero}.pdf`)
+      } else {
+        await descargarTicket(`/api/pedidos/${pedido.id}/ticket`, `ticket-pedido-${pedido.id}.pdf`)
+      }
     } catch (err) {
       addToast(err.message, 'error')
     } finally {
@@ -65,6 +71,12 @@ export default function HistorialPedidos({ addToast }) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Historial de Pedidos</h1>
+        <button
+          onClick={() => setMostrarReporte(true)}
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-2"
+        >
+          📊 Reporte de ventas facturadas
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
@@ -120,7 +132,9 @@ export default function HistorialPedidos({ addToast }) {
                         disabled={descargandoId === p.id}
                         className="px-3 py-1 rounded-lg border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50 transition disabled:opacity-50"
                       >
-                        {descargandoId === p.id ? 'Descargando…' : '⬇ Ticket'}
+                        {descargandoId === p.id
+                          ? 'Descargando…'
+                          : p.factura_id && p.factura_estado === 'aprobada' ? '⬇ Factura' : '⬇ Ticket'}
                       </button>
                     </td>
                   </tr>
@@ -157,6 +171,10 @@ export default function HistorialPedidos({ addToast }) {
           onClose={() => setPedidoIdSeleccionado(null)}
           addToast={addToast}
         />
+      )}
+
+      {mostrarReporte && (
+        <ReporteVentasModal onClose={() => setMostrarReporte(false)} addToast={addToast} />
       )}
     </div>
   )

@@ -27,7 +27,7 @@ export default function Login({ onLogin }) {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
         <p className="text-xs font-semibold text-indigo-500 uppercase tracking-widest mb-1">Sistema</p>
-        <h1 className="text-2xl font-black text-gray-800 mb-6">Chepola</h1>
+        <h1 className="text-2xl font-black text-gray-800 mb-6">Chapola</h1>
 
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
           Usuario

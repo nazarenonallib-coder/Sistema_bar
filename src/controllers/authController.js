@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
+const logger = require('../utils/logger');
 
 const JWT_EXPIRES_IN = '12h';
 
@@ -26,6 +27,7 @@ const login = async (req, res) => {
 
     res.json({ token, usuario: { id: user.id, username: user.username, rol: user.rol } });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const { version: VERSION } = require('../package.json');
 const pool             = require('./config/db');
 const authRoutes       = require('./routes/authRoutes');
 const productoRoutes   = require('./routes/productoRoutes');
@@ -12,16 +13,31 @@ const estructuraRoutes = require('./routes/estructuraRoutes');
 const sillaRoutes      = require('./routes/sillaRoutes');
 const facturaRoutes    = require('./routes/facturaRoutes');
 const requireAuth      = require('./middleware/authMiddleware');
+const requestLogger    = require('./middleware/requestLogger');
+const errorHandler     = require('./middleware/errorHandler');
+const logger           = require('./utils/logger');
+
+// Errores que no pasaron por ningún try/catch (bug de programación, no una falla de negocio
+// esperada): se registran para poder diagnosticarlos y, en el caso de uncaughtException, se
+// corta el proceso porque el estado interno de Node ya no es confiable después de eso.
+process.on('unhandledRejection', (reason) => {
+  logger.error(`unhandledRejection: ${reason?.message || reason}`, { stack: reason?.stack });
+});
+process.on('uncaughtException', async (err) => {
+  await logger.logFatal(`uncaughtException: ${err.message}`, { stack: err.stack });
+  process.exit(1);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(requestLogger);
 
 app.get('/api', (req, res) => {
   res.json({
     api: 'Sistema Chepola',
-    version: '1.0.0',
+    version: VERSION,
     endpoints: {
       health:   'GET  /health',
       login:    'POST /api/auth/login',
@@ -66,7 +82,7 @@ app.get('/api', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', version: VERSION, timestamp: new Date().toISOString() });
 });
 
 app.use('/api/auth', authRoutes);
@@ -94,14 +110,16 @@ app.use((req, res) => {
   res.status(404).json({ error: `Ruta ${req.method} ${req.path} no encontrada.` });
 });
 
+app.use(errorHandler);
+
 pool.ensureDatabase()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Servidor corriendo en http://localhost:${PORT}`);
+      logger.info(`Servidor corriendo en http://localhost:${PORT}`);
     });
   })
-  .catch((err) => {
-    console.error(`No se pudo verificar/crear la base de datos: [${err.code}] ${err.message}`);
+  .catch(async (err) => {
+    await logger.logFatal(`No se pudo verificar/crear la base de datos: [${err.code}] ${err.message}`, { stack: err.stack });
     process.exit(1);
   });
 

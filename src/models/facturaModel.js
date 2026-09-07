@@ -4,12 +4,13 @@ const create = async (data, conn = pool) => {
   const [result] = await conn.query(
     `INSERT INTO facturas
        (mesa_id, sesion_apertura, metodo_pago, tipo_comprobante, punto_venta, doc_tipo, doc_nro,
-        condicion_iva_receptor_id, receptor_nombre, importe_total, entorno, creado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        condicion_iva_receptor_id, receptor_nombre, domicilio_receptor, importe_total, entorno, creado_por)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.mesa_id, data.sesion_apertura, data.metodo_pago, data.tipo_comprobante,
       data.punto_venta, data.doc_tipo, data.doc_nro, data.condicion_iva_receptor_id,
-      data.receptor_nombre ?? null, data.importe_total, data.entorno, data.creado_por ?? null,
+      data.receptor_nombre ?? null, data.domicilio_receptor ?? null, data.importe_total,
+      data.entorno, data.creado_por ?? null,
     ]
   );
   const [rows] = await conn.query('SELECT * FROM facturas WHERE id = ?', [result.insertId]);
@@ -58,4 +59,29 @@ const getHistorial = async (page, limit) => {
   return { rows, total };
 };
 
-module.exports = { create, updateResultado, getBySesion, getById, getHistorial };
+// Ventas ya facturadas (con CAE aprobado) para el reporte contable. `desde`/`hasta` son fechas
+// 'YYYY-MM-DD' opcionales; sin ellas trae todo el historial aprobado.
+const getVentasFacturadas = async (desde, hasta) => {
+  const condiciones = ["f.estado = 'aprobada'"];
+  const params = [];
+  if (desde) {
+    condiciones.push('f.fecha_emision >= ?');
+    params.push(`${desde} 00:00:00`);
+  }
+  if (hasta) {
+    condiciones.push('f.fecha_emision <= ?');
+    params.push(`${hasta} 23:59:59`);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT f.*, m.numero_mesa
+     FROM facturas f
+     JOIN mesas m ON f.mesa_id = m.id
+     WHERE ${condiciones.join(' AND ')}
+     ORDER BY f.fecha_emision ASC`,
+    params
+  );
+  return rows;
+};
+
+module.exports = { create, updateResultado, getBySesion, getById, getHistorial, getVentasFacturadas };

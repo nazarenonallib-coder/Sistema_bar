@@ -60,6 +60,30 @@ Con 2 usuarios y una sola sucursal, no tiene sentido sobre-diseñar el sistema. 
 - "Cuanto antes mejor" (sin fecha límite estricta, pero urgencia alta)
 - Lo más importante en este momento: control de precios de la carta
 
+## Versionado del sistema
+El sistema usa un único número de versión `MAJOR.MINOR.PATCH`, arrancando en **1.0.0**. No es
+semver estándar (no indica compatibilidad hacia atrás): cada posición identifica qué capa cambió.
+
+- **MAJOR** (primer número): cambios en la base de datos — esquema, migraciones, cualquier script
+  en `database/*.sql` (`ALTER TABLE`, tabla nueva, columna nueva, índice nuevo, etc.).
+- **MINOR** (segundo número): cambios en el backend (Node.js: `src/controllers`, `src/models`,
+  `src/services`, `src/routes`, `src/middleware`) que NO tocan el esquema de la base de datos.
+- **PATCH** (tercer número): cambios en el frontend (React, `frontend/src`) que no tocan backend
+  ni base de datos.
+
+Reglas:
+- Subir un número más significativo reinicia los de la derecha a 0 (ej: un cambio de base de
+  datos lleva 1.3.7 → 2.0.0, no 2.3.7).
+- Si un cambio toca más de una capa a la vez (ej: una migración nueva + el endpoint que la usa),
+  se sube el número de la capa más significativa involucrada — en ese ejemplo, MAJOR, porque
+  incluye base de datos.
+- La versión vive en el campo `"version"` de `package.json` (raíz del repo); `frontend/package.json`
+  se mantiene igual a ese mismo número por consistencia, aunque no se lee de ahí en tiempo de
+  ejecución. El backend expone ese valor en `GET /api` y `GET /health` (leído directo de
+  `package.json`, no hardcodeado).
+- Cada vez que se haga un cambio que corresponda a una de estas categorías, hay que actualizar
+  `package.json` (raíz) como parte del mismo commit.
+
 
 # AFIP / ARCA — Integración de Facturación Electrónica
 > Investigado sobre documentación oficial de ARCA (arca.gov.ar / afip.gob.ar) — Julio 2026

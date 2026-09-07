@@ -1,5 +1,6 @@
 const Producto = require('../models/productoModel');
 const Insumo = require('../models/insumoModel');
+const logger = require('../utils/logger');
 
 const validarCampos = ({ nombre, precio }) => {
   const errores = [];
@@ -24,6 +25,7 @@ const getAll = async (req, res) => {
     const productos = await Producto.getAll();
     res.json(productos);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -48,6 +50,7 @@ const getOne = async (req, res) => {
     }
     return res.json(productos);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -71,6 +74,7 @@ const create = async (req, res) => {
     });
     res.status(201).json(nuevo);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -98,6 +102,7 @@ const update = async (req, res) => {
     const actualizado = await Producto.getById(id);
     res.json(actualizado);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -117,6 +122,7 @@ const remove = async (req, res) => {
         error: 'Este producto ya fue usado en pedidos y no se puede eliminar. Marcalo como "no disponible" (stock 0) en su lugar.',
       });
     }
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -134,6 +140,7 @@ const getInsumosDeProducto = async (req, res) => {
     const insumos = await Insumo.getByProducto(producto_id);
     res.json(insumos);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -160,6 +167,7 @@ const addInsumoAProducto = async (req, res) => {
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY')
       return res.status(409).json({ error: 'Ese insumo ya está en la receta de este producto. Editá la cantidad en su lugar.' });
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -182,6 +190,7 @@ const updateInsumoDeProducto = async (req, res) => {
     await Insumo.updateCantidad(linea_id, cantidad_consumida);
     res.json({ ...linea, cantidad_consumida });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -200,6 +209,7 @@ const removeInsumoDeProducto = async (req, res) => {
     await Insumo.removeFromProducto(linea_id);
     res.json({ message: 'Insumo quitado de la receta.', producto_id, id: linea_id });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

@@ -1,4 +1,5 @@
 const Salon = require('../models/salonModel');
+const logger = require('../utils/logger');
 
 const validarNombre = (nombre) =>
   typeof nombre === 'string' && nombre.trim() !== '';
@@ -7,6 +8,7 @@ const getAll = async (req, res) => {
   try {
     res.json(await Salon.getAll());
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -21,6 +23,7 @@ const create = async (req, res) => {
     const salon = await Salon.create(nombre.trim(), color_fondo);
     res.status(201).json(salon);
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -42,6 +45,7 @@ const update = async (req, res) => {
     await Salon.update(id, { nombre: nombre.trim(), color_fondo: color_fondo ?? salon.color_fondo });
     res.json(await Salon.getById(id));
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -64,6 +68,7 @@ const remove = async (req, res) => {
     await Salon.remove(id);
     res.json({ message: `Salón "${salon.nombre}" eliminado correctamente.` });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

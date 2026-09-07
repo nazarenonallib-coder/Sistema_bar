@@ -4,7 +4,7 @@ const {
   updatePosicion, updateColor, updateTamano, combinar, separar,
 } = require('../controllers/mesaController');
 const { create: crearSilla } = require('../controllers/sillaController');
-const { ticketCuentaMesa } = require('../controllers/ticketController');
+const { ticketCuentaMesa, comandaMesa } = require('../controllers/ticketController');
 
 const router = Router();
 
@@ -14,6 +14,7 @@ router.post('/combinar', combinar);
 router.post('/grupos/:grupoId/separar', separar);
 router.get('/:id/pedidos-activos', getPedidosActivos);
 router.get('/:id/ticket', ticketCuentaMesa);
+router.get('/:id/comanda', comandaMesa);
 router.patch('/:id/posicion', updatePosicion);
 router.patch('/:id/color', updateColor);
 router.patch('/:id/tamano', updateTamano);

@@ -1,8 +1,9 @@
 const Pedido = require('../models/pedidoModel');
 const Mesa = require('../models/mesaModel');
 const Factura = require('../models/facturaModel');
-const { generarTicketPedido, generarTicketCuenta } = require('../services/ticketService');
+const { generarTicketPedido, generarTicketCuenta, generarComandaMesa } = require('../services/ticketService');
 const { generarFacturaPDF } = require('../services/facturaPdfService');
+const logger = require('../utils/logger');
 
 // Ticket (comprobante interno, no fiscal) de una silla/pedido puntual. Se puede pedir tanto para
 // un pedido activo como para uno ya finalizado (para reimprimir desde el historial).
@@ -27,6 +28,7 @@ const ticketPedido = async (req, res) => {
       sillasTotales: sillasIds.length || 1,
     });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -57,13 +59,41 @@ const ticketCuentaMesa = async (req, res) => {
     // factura aprobada (por ejemplo, para uso interno de cocina/mostrador sin valor fiscal).
     const factura = await Factura.getBySesion(mesa_id, sesionApertura);
     if (req.query.tipo !== 'interno' && factura && factura.estado === 'aprobada') {
-      return await generarFacturaPDF(res, factura, { items });
+      return await generarFacturaPDF(res, factura, { items, copia: 'ORIGINAL' });
     }
 
     generarTicketCuenta(res, { mesa, pedidos, items });
   } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
 
-module.exports = { ticketPedido, ticketCuentaMesa };
+// Comanda (para cocina/barra) de los pedidos activos de una mesa, sin precios. A diferencia del
+// ticket, se puede pedir con la cuenta todavía abierta, incluso sin ninguna silla cerrada.
+const comandaMesa = async (req, res) => {
+  const mesa_id = parseInt(req.params.id, 10);
+  if (isNaN(mesa_id))
+    return res.status(400).json({ error: 'El parámetro "id" debe ser un entero válido.' });
+
+  try {
+    const mesa = await Mesa.getById(mesa_id);
+    if (!mesa)
+      return res.status(404).json({ error: `Mesa con id ${mesa_id} no encontrada.` });
+
+    const pedidos = await Pedido.getActivosConDatosByMesa(mesa_id);
+    if (!pedidos.length)
+      return res.status(400).json({ error: 'Esta mesa no tiene pedidos activos.' });
+
+    const items = await Pedido.getItemsByPedidoIds(pedidos.map((p) => p.id));
+    if (!items.length)
+      return res.status(400).json({ error: 'Esta mesa todavía no tiene productos cargados.' });
+
+    generarComandaMesa(res, { mesa, pedidos, items });
+  } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
+  }
+};
+
+module.exports = { ticketPedido, ticketCuentaMesa, comandaMesa };
