@@ -1,18 +1,13 @@
--- Script único para crear la base de datos completa desde cero (para un servidor nuevo, ej. Hostinger,
--- o donde no se pueda dejar que el propio backend la autoprovisione al arrancar).
--- Equivale a aplicar, en orden, schema.sql + todos los migracion_*/alter_*.sql + crear_users.sql
--- de este mismo directorio, pero ya con el esquema final (sin los pasos intermedios de backfill,
--- que no aplican sobre una base vacía).
+-- Esquema de tablas (sin CREATE DATABASE ni USE: la base de datos objetivo la elige la conexión
+-- que ejecuta este script, vía DB_NAME en .env). Es la misma fuente que usa la app para
+-- autoprovisionar una base de datos nueva (ver src/config/db.js -> ensureDatabase) y la que se
+-- usa para levantar a mano una base en un servidor nuevo (ej. Hostinger).
 --
--- Las tablas de acá abajo (desde CREATE TABLE users en adelante) son una copia de schema.sql,
--- que es la que usa el backend para crear la base de datos solo si todavía no existe (ver
--- src/config/db.js -> ensureDatabase). Si se cambia el esquema, actualizar ambos archivos.
-
-CREATE DATABASE IF NOT EXISTS sistema_chepola
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE sistema_chepola;
+-- IMPORTANTE: no todas estas sentencias son re-ejecutables sobre una base ya inicializada
+-- (el ALTER TABLE de fk_mesa_grupo falla si la constraint ya existe, y el INSERT de salones
+-- duplicaría la fila). Por eso ensureDatabase() solo la corre una vez, cuando detecta que la
+-- tabla "users" todavía no existe. Si se agregan tablas o columnas nuevas más adelante, hacerlo
+-- también acá para que una instalación nueva (otro bar) arranque con el esquema completo.
 
 -- Login básico. El campo "rol" no habilita todavía ningún permiso diferenciado (ambos roles
 -- pueden hacer las mismas acciones); existe para no tener que migrar el esquema el día que se
