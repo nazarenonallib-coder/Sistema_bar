@@ -10,9 +10,9 @@ const TIPOS = [
   { value: 'mes', label: 'Mes (por día)' },
 ]
 
-// Barras simples en HTML/CSS (sin librería de gráficos): una sola serie de magnitud, un solo
-// color, con tooltip al pasar el mouse. Ver skill de dataviz — para una sola serie no hace
-// falta leyenda (el título ya la nombra).
+// Barras horizontales simples (una fila por hora/día): el ancho de la barra es un % del ancho
+// del contenedor, que es mucho más robusto en CSS que animar/calcular alturas dentro de flexbox.
+// Una sola serie de magnitud, un solo color — no hace falta leyenda (el título ya la nombra).
 export default function GraficosVentas({ addToast }) {
   const [tipo, setTipo] = useState('dia')
   const [fecha, setFecha] = useState(hoyISO())
@@ -21,7 +21,6 @@ export default function GraficosVentas({ addToast }) {
   const [totalPeriodo, setTotalPeriodo] = useState(0)
   const [rango, setRango] = useState({ desde: '', hasta: '' })
   const [loading, setLoading] = useState(true)
-  const [hoverIdx, setHoverIdx] = useState(null)
 
   const fetchDatos = useCallback(async () => {
     setLoading(true)
@@ -95,40 +94,25 @@ export default function GraficosVentas({ addToast }) {
       ) : totalPeriodo === 0 ? (
         <div className="text-center py-12 text-gray-400 text-sm">No hay ventas registradas en este período.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: Math.max(datos.length * 28, 480) }}>
-            <div className="flex items-end gap-0.5 h-48 border-b border-gray-200">
-              {datos.map((d, i) => {
-                const valor = modo === 'monto' ? d.total : d.porcentaje
-                const alturaPct = max > 0 ? (valor / max) * 100 : 0
-                return (
+        <div className="max-h-96 overflow-y-auto pr-1 space-y-1.5">
+          {datos.map((d) => {
+            const valor = modo === 'monto' ? d.total : d.porcentaje
+            const anchoPct = valor > 0 ? Math.max((valor / max) * 100, 1.5) : 0
+            return (
+              <div key={d.clave} className="flex items-center gap-3">
+                <div className="w-12 shrink-0 text-xs text-gray-500 text-right">{d.etiqueta}</div>
+                <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
                   <div
-                    key={d.clave}
-                    className="relative flex-1 flex flex-col justify-end h-full"
-                    onMouseEnter={() => setHoverIdx(i)}
-                    onMouseLeave={() => setHoverIdx(null)}
-                  >
-                    {hoverIdx === i && (
-                      <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10 pointer-events-none">
-                        ${d.total.toFixed(2)} · {d.porcentaje}%
-                      </div>
-                    )}
-                    <div
-                      className={`w-full rounded-t transition-colors ${hoverIdx === i ? 'bg-indigo-700' : 'bg-indigo-500'}`}
-                      style={{ height: `${valor > 0 ? Math.max(alturaPct, 2) : 0}%` }}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex gap-0.5 mt-1">
-              {datos.map(d => (
-                <div key={d.clave} className="flex-1 text-center text-[10px] text-gray-400 whitespace-nowrap">
-                  {d.etiqueta}
+                    className="h-full rounded-full bg-indigo-500"
+                    style={{ width: `${anchoPct}%` }}
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="w-24 shrink-0 text-xs text-gray-600 font-semibold text-right">
+                  {modo === 'monto' ? `$${valor.toFixed(2)}` : `${valor}%`}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
