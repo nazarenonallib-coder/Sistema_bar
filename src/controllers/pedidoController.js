@@ -363,7 +363,7 @@ const getHistorial = async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
 
-  const { desde, hasta, metodo_pago, estado_factura, con_factura } = req.query;
+  const { desde, hasta, metodo_pago, estado_factura, con_factura, sort, order } = req.query;
   const numero_mesa = req.query.numero_mesa !== undefined ? parseInt(req.query.numero_mesa, 10) : undefined;
 
   if (desde !== undefined && !FECHA_REGEX.test(desde))
@@ -380,10 +380,14 @@ const getHistorial = async (req, res) => {
     return res.status(400).json({ error: `"estado_factura" debe ser uno de: ${ESTADOS_FACTURA_VALIDOS.join(', ')}.` });
   if (con_factura !== undefined && !['si', 'no'].includes(con_factura))
     return res.status(400).json({ error: '"con_factura" debe ser "si" o "no".' });
+  if (sort !== undefined && !Pedido.SORT_CAMPOS_VALIDOS.includes(sort))
+    return res.status(400).json({ error: `"sort" debe ser uno de: ${Pedido.SORT_CAMPOS_VALIDOS.join(', ')}.` });
+  if (order !== undefined && !['asc', 'desc'].includes(order))
+    return res.status(400).json({ error: '"order" debe ser "asc" o "desc".' });
 
   try {
     const { rows, total } = await Pedido.getHistorial(page, limit, {
-      desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura,
+      desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura, sort, order,
     });
     res.json({
       pedidos: rows,
@@ -392,6 +396,56 @@ const getHistorial = async (req, res) => {
       limit,
       total_paginas: Math.max(1, Math.ceil(total / limit)),
     });
+  } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
+  }
+};
+
+const TIPOS_ESTADISTICA_VALIDOS = ['dia', 'semana', 'mes'];
+const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+// Ventas cerradas agrupadas por hora (tipo=dia) o por día (tipo=semana/mes), con el porcentaje
+// que representa cada bucket sobre el total del período, para graficar en el Historial.
+const getEstadisticas = async (req, res) => {
+  const { tipo } = req.query;
+  const fecha = req.query.fecha || new Date().toISOString().slice(0, 10);
+
+  if (!TIPOS_ESTADISTICA_VALIDOS.includes(tipo))
+    return res.status(400).json({ error: `"tipo" debe ser uno de: ${TIPOS_ESTADISTICA_VALIDOS.join(', ')}.` });
+  if (!FECHA_REGEX.test(fecha))
+    return res.status(400).json({ error: '"fecha" debe tener formato YYYY-MM-DD.' });
+
+  try {
+    const { desde, hasta, rows } = await Pedido.getEstadisticas(tipo, fecha);
+    const porClave = new Map(rows.map((r) => [String(r.clave), { cantidad: r.cantidad, total: Number(r.total) }]));
+
+    let datos;
+    if (tipo === 'dia') {
+      datos = Array.from({ length: 24 }, (_, hora) => {
+        const d = porClave.get(String(hora)) || { cantidad: 0, total: 0 };
+        return { clave: hora, etiqueta: `${String(hora).padStart(2, '0')}h`, ...d };
+      });
+    } else {
+      datos = [];
+      const cursor = new Date(`${desde}T00:00:00`);
+      const fin = new Date(`${hasta}T00:00:00`);
+      while (cursor <= fin) {
+        const clave = cursor.toISOString().slice(0, 10);
+        const d = porClave.get(clave) || { cantidad: 0, total: 0 };
+        const etiqueta = tipo === 'semana' ? `${DIAS_SEMANA[cursor.getDay()]} ${cursor.getDate()}` : `${cursor.getDate()}`;
+        datos.push({ clave, etiqueta, ...d });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+
+    const totalPeriodo = datos.reduce((sum, d) => sum + d.total, 0);
+    datos = datos.map((d) => ({
+      ...d,
+      porcentaje: totalPeriodo > 0 ? Math.round((d.total / totalPeriodo) * 1000) / 10 : 0,
+    }));
+
+    res.json({ tipo, desde, hasta, total_periodo: Math.round(totalPeriodo * 100) / 100, datos });
   } catch (err) {
     logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
@@ -426,5 +480,6 @@ module.exports = {
   marcarItemEntregado,
   marcarPedidoEntregado,
   getHistorial,
+  getEstadisticas,
   getOne,
 };

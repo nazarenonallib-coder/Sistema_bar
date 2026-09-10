@@ -121,6 +121,8 @@ export const getHistorialPedidos = (page = 1, limit = 20, filtros = {}) => {
   return request(`/pedidos/historial?${params}`)
 }
 export const getPedido           = (id) => request(`/pedidos/${id}`)
+export const getEstadisticasVentas = (tipo, fecha) =>
+  request(`/pedidos/estadisticas?${new URLSearchParams({ tipo, fecha })}`)
 
 // Facturación (ARCA / ex AFIP)
 export const getFacturaConfig     = ()       => request('/facturas/config')

@@ -3,6 +3,7 @@ import * as api from '../../api'
 import Spinner from '../Spinner'
 import DetallePedidoModal from './DetallePedidoModal'
 import ReporteVentasModal from './ReporteVentasModal'
+import GraficosVentas from './GraficosVentas'
 import { descargarTicket } from '../../utils/ticket'
 
 const formatHora = (fecha) =>
@@ -53,8 +54,23 @@ export default function HistorialPedidos({ addToast }) {
   const [page, setPage] = useState(1)
   const [totalPaginas, setTotalPaginas] = useState(1)
   const [mostrarReporte, setMostrarReporte] = useState(false)
+  const [mostrarGraficos, setMostrarGraficos] = useState(false)
   const [filtros, setFiltros] = useState(FILTROS_VACIOS)
   const [filtrosAplicados, setFiltrosAplicados] = useState(FILTROS_VACIOS)
+  const [sort, setSort] = useState('fecha_cierre')
+  const [order, setOrder] = useState('desc')
+
+  const handleSort = (campo) => {
+    if (sort === campo) {
+      setOrder(o => o === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSort(campo)
+      setOrder(campo === 'numero_mesa' ? 'asc' : 'desc')
+    }
+    setPage(1)
+  }
+
+  const FlechaOrden = ({ campo }) => sort === campo ? <span className="ml-1">{order === 'asc' ? '▲' : '▼'}</span> : null
 
   const hayFiltrosActivos = Object.values(filtrosAplicados).some(Boolean)
 
@@ -91,7 +107,7 @@ export default function HistorialPedidos({ addToast }) {
   const fetchHistorial = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await api.getHistorialPedidos(page, LIMIT, filtrosAplicados)
+      const data = await api.getHistorialPedidos(page, LIMIT, { ...filtrosAplicados, sort, order })
       setPedidos(data.pedidos)
       setTotalPaginas(data.total_paginas)
     } catch (err) {
@@ -99,7 +115,7 @@ export default function HistorialPedidos({ addToast }) {
     } finally {
       setLoading(false)
     }
-  }, [addToast, page, filtrosAplicados])
+  }, [addToast, page, filtrosAplicados, sort, order])
 
   useEffect(() => { fetchHistorial() }, [fetchHistorial])
 
@@ -107,13 +123,25 @@ export default function HistorialPedidos({ addToast }) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Historial de Pedidos</h1>
-        <button
-          onClick={() => setMostrarReporte(true)}
-          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-2"
-        >
-          📊 Reporte de ventas facturadas
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMostrarGraficos(v => !v)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 border ${
+              mostrarGraficos ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'
+            }`}
+          >
+            📈 Gráficos de ventas
+          </button>
+          <button
+            onClick={() => setMostrarReporte(true)}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition flex items-center gap-2"
+          >
+            📊 Reporte de ventas facturadas
+          </button>
+        </div>
       </div>
+
+      {mostrarGraficos && <GraficosVentas addToast={addToast} />}
 
       <div className="bg-white rounded-2xl shadow-sm border p-4 mb-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -220,13 +248,33 @@ export default function HistorialPedidos({ addToast }) {
               <thead>
                 <tr className="bg-gray-50 border-b text-gray-500 text-xs uppercase tracking-wider">
                   <th className="text-left px-5 py-3 w-10">#</th>
-                  <th className="text-left px-5 py-3">Mesa</th>
-                  <th className="text-left px-5 py-3">Apertura mesa</th>
-                  <th className="text-left px-5 py-3">Apertura silla</th>
-                  <th className="text-left px-5 py-3">Cierre silla</th>
+                  <th className="text-left px-5 py-3">
+                    <button onClick={() => handleSort('numero_mesa')} className="flex items-center hover:text-gray-700">
+                      Mesa<FlechaOrden campo="numero_mesa" />
+                    </button>
+                  </th>
+                  <th className="text-left px-5 py-3">
+                    <button onClick={() => handleSort('sesion_apertura')} className="flex items-center hover:text-gray-700">
+                      Apertura mesa<FlechaOrden campo="sesion_apertura" />
+                    </button>
+                  </th>
+                  <th className="text-left px-5 py-3">
+                    <button onClick={() => handleSort('fecha_creacion')} className="flex items-center hover:text-gray-700">
+                      Apertura silla<FlechaOrden campo="fecha_creacion" />
+                    </button>
+                  </th>
+                  <th className="text-left px-5 py-3">
+                    <button onClick={() => handleSort('fecha_cierre')} className="flex items-center hover:text-gray-700">
+                      Cierre silla<FlechaOrden campo="fecha_cierre" />
+                    </button>
+                  </th>
                   <th className="text-left px-5 py-3">Cierre mesa</th>
                   <th className="text-left px-5 py-3">Comprobante</th>
-                  <th className="text-right px-5 py-3">Total</th>
+                  <th className="text-right px-5 py-3">
+                    <button onClick={() => handleSort('total')} className="flex items-center justify-end w-full hover:text-gray-700">
+                      Total<FlechaOrden campo="total" />
+                    </button>
+                  </th>
                   <th className="text-right px-5 py-3">Acciones</th>
                 </tr>
               </thead>

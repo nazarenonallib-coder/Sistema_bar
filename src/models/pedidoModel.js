@@ -100,11 +100,23 @@ const addProductos = async (pedido_id, productos, conn) => {
   }
 };
 
+// Columnas por las que se puede ordenar el historial (whitelist: van directo a un ORDER BY
+// armado con string concatenation, así que nunca se acepta el nombre de columna del cliente sin
+// pasar por este mapa).
+const SORT_COLUMNAS = {
+  fecha_cierre: 'p.fecha_cierre',
+  fecha_creacion: 'p.fecha_creacion',
+  sesion_apertura: 'p.sesion_apertura',
+  numero_mesa: 'm.numero_mesa',
+  total: 'p.total',
+};
+
 // Paginado: con más uso el historial crece indefinidamente, así que nunca se trae completo.
 // filtros admitidos: desde/hasta (fecha_cierre, 'YYYY-MM-DD'), numero_mesa, metodo_pago,
-// estado_factura, con_factura ('si'|'no' — si la cuenta se facturó ante ARCA o se cerró solo con ticket).
+// estado_factura, con_factura ('si'|'no' — si la cuenta se facturó ante ARCA o se cerró solo con
+// ticket), sort (clave de SORT_COLUMNAS), order ('asc'|'desc').
 const getHistorial = async (page, limit, filtros = {}) => {
-  const { desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura } = filtros;
+  const { desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura, sort, order } = filtros;
   const offset = (page - 1) * limit;
 
   const condiciones = [`p.estado = 'finalizado'`];
@@ -118,6 +130,11 @@ const getHistorial = async (page, limit, filtros = {}) => {
   if (con_factura === 'no') condiciones.push('f.id IS NULL');
   const whereSql = `WHERE ${condiciones.join(' AND ')}`;
 
+  const ordenDireccion = order === 'asc' ? 'ASC' : 'DESC';
+  const ordenSql = SORT_COLUMNAS[sort]
+    ? `ORDER BY ${SORT_COLUMNAS[sort]} ${ordenDireccion}`
+    : `ORDER BY p.fecha_cierre DESC, p.fecha_creacion DESC`;
+
   const [rows] = await pool.query(
     `SELECT p.id, p.mesa_id, m.numero_mesa, p.estado, p.total,
             p.sesion_apertura, p.fecha_creacion, p.fecha_cierre,
@@ -126,7 +143,7 @@ const getHistorial = async (page, limit, filtros = {}) => {
      JOIN mesas m ON p.mesa_id = m.id
      ${FACTURA_JOIN}
      ${whereSql}
-     ORDER BY p.fecha_cierre DESC, p.fecha_creacion DESC
+     ${ordenSql}
      LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
@@ -139,6 +156,45 @@ const getHistorial = async (page, limit, filtros = {}) => {
     params
   );
   return { rows, total };
+};
+
+// Agrupa las ventas cerradas por hora (tipo='dia') o por día (tipo='semana'/'mes') para graficar.
+// fecha ('YYYY-MM-DD') es la fecha ancla: para 'semana' se usa la semana (lunes a domingo) que la
+// contiene, para 'mes' el mes calendario que la contiene. Se arma con componentes locales de Date
+// (no parseo de ISO string, que interpreta en UTC) para no correr el día por husos horarios.
+const getEstadisticas = async (tipo, fecha) => {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  let desde, hasta, agruparPor;
+  if (tipo === 'dia') {
+    desde = hasta = fecha;
+    agruparPor = 'HOUR(p.fecha_cierre)';
+  } else if (tipo === 'semana') {
+    const base = new Date(anio, mes - 1, dia);
+    const offsetLunes = (base.getDay() + 6) % 7; // lunes=0 ... domingo=6
+    const lunes = new Date(anio, mes - 1, dia - offsetLunes);
+    const domingo = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + 6);
+    desde = fmt(lunes);
+    hasta = fmt(domingo);
+    agruparPor = "DATE_FORMAT(p.fecha_cierre, '%Y-%m-%d')";
+  } else {
+    const primerDia = new Date(anio, mes - 1, 1);
+    const ultimoDia = new Date(anio, mes, 0);
+    desde = fmt(primerDia);
+    hasta = fmt(ultimoDia);
+    agruparPor = "DATE_FORMAT(p.fecha_cierre, '%Y-%m-%d')";
+  }
+
+  const [rows] = await pool.query(
+    `SELECT ${agruparPor} AS clave, COUNT(*) AS cantidad, COALESCE(SUM(p.total), 0) AS total
+     FROM pedidos p
+     WHERE p.estado = 'finalizado' AND p.fecha_cierre >= ? AND p.fecha_cierre <= ?
+     GROUP BY clave`,
+    [`${desde} 00:00:00`, `${hasta} 23:59:59`]
+  );
+
+  return { desde, hasta, rows };
 };
 
 const getItems = async (pedido_id, conn = pool) => {
@@ -255,6 +311,8 @@ module.exports = {
   cerrarPedidosMesa,
   cerrarPedidoIndividual,
   getHistorial,
+  getEstadisticas,
+  SORT_CAMPOS_VALIDOS: Object.keys(SORT_COLUMNAS),
   getItems,
   getItem,
   getSillasSesion,
