@@ -101,9 +101,10 @@ const addProductos = async (pedido_id, productos, conn) => {
 };
 
 // Paginado: con más uso el historial crece indefinidamente, así que nunca se trae completo.
-// filtros admitidos: desde/hasta (fecha_cierre, 'YYYY-MM-DD'), numero_mesa, metodo_pago, estado_factura.
+// filtros admitidos: desde/hasta (fecha_cierre, 'YYYY-MM-DD'), numero_mesa, metodo_pago,
+// estado_factura, con_factura ('si'|'no' — si la cuenta se facturó ante ARCA o se cerró solo con ticket).
 const getHistorial = async (page, limit, filtros = {}) => {
-  const { desde, hasta, numero_mesa, metodo_pago, estado_factura } = filtros;
+  const { desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura } = filtros;
   const offset = (page - 1) * limit;
 
   const condiciones = [`p.estado = 'finalizado'`];
@@ -113,6 +114,8 @@ const getHistorial = async (page, limit, filtros = {}) => {
   if (numero_mesa) { condiciones.push('m.numero_mesa = ?'); params.push(numero_mesa); }
   if (metodo_pago) { condiciones.push('f.metodo_pago = ?'); params.push(metodo_pago); }
   if (estado_factura) { condiciones.push('f.estado = ?'); params.push(estado_factura); }
+  if (con_factura === 'si') condiciones.push('f.id IS NOT NULL');
+  if (con_factura === 'no') condiciones.push('f.id IS NULL');
   const whereSql = `WHERE ${condiciones.join(' AND ')}`;
 
   const [rows] = await pool.query(

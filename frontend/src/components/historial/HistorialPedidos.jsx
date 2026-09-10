@@ -43,7 +43,7 @@ const ESTADOS_FACTURA = [
   { value: 'error', label: 'Error ARCA' },
 ]
 
-const FILTROS_VACIOS = { desde: '', hasta: '', numero_mesa: '', metodo_pago: '', estado_factura: '' }
+const FILTROS_VACIOS = { desde: '', hasta: '', numero_mesa: '', metodo_pago: '', estado_factura: '', con_factura: '' }
 
 export default function HistorialPedidos({ addToast }) {
   const [pedidos, setPedidos] = useState([])
@@ -160,11 +160,28 @@ export default function HistorialPedidos({ addToast }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Comprobante</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Facturación ARCA</label>
+            <select
+              value={filtros.con_factura}
+              onChange={(e) => setFiltros(f => ({
+                ...f,
+                con_factura: e.target.value,
+                estado_factura: e.target.value === 'no' ? '' : f.estado_factura,
+              }))}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="">Todas</option>
+              <option value="si">Con factura ARCA</option>
+              <option value="no">Sin factura (solo ticket)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Estado comprobante</label>
             <select
               value={filtros.estado_factura}
+              disabled={filtros.con_factura === 'no'}
               onChange={(e) => setFiltros(f => ({ ...f, estado_factura: e.target.value }))}
-              className="border rounded-lg px-3 py-1.5 text-sm"
+              className="border rounded-lg px-3 py-1.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">Todos</option>
               {ESTADOS_FACTURA.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}

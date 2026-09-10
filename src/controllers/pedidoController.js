@@ -363,7 +363,7 @@ const getHistorial = async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
 
-  const { desde, hasta, metodo_pago, estado_factura } = req.query;
+  const { desde, hasta, metodo_pago, estado_factura, con_factura } = req.query;
   const numero_mesa = req.query.numero_mesa !== undefined ? parseInt(req.query.numero_mesa, 10) : undefined;
 
   if (desde !== undefined && !FECHA_REGEX.test(desde))
@@ -378,10 +378,12 @@ const getHistorial = async (req, res) => {
     return res.status(400).json({ error: `"metodo_pago" debe ser uno de: ${METODOS_PAGO_VALIDOS.join(', ')}.` });
   if (estado_factura !== undefined && !ESTADOS_FACTURA_VALIDOS.includes(estado_factura))
     return res.status(400).json({ error: `"estado_factura" debe ser uno de: ${ESTADOS_FACTURA_VALIDOS.join(', ')}.` });
+  if (con_factura !== undefined && !['si', 'no'].includes(con_factura))
+    return res.status(400).json({ error: '"con_factura" debe ser "si" o "no".' });
 
   try {
     const { rows, total } = await Pedido.getHistorial(page, limit, {
-      desde, hasta, numero_mesa, metodo_pago, estado_factura,
+      desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura,
     });
     res.json({
       pedidos: rows,
