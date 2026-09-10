@@ -355,12 +355,34 @@ const marcarPedidoEntregado = async (req, res) => {
   }
 };
 
+const METODOS_PAGO_VALIDOS = ['efectivo', 'tarjeta_debito', 'tarjeta_credito', 'transferencia', 'otro'];
+const ESTADOS_FACTURA_VALIDOS = ['pendiente', 'aprobada', 'rechazada', 'error'];
+const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
 const getHistorial = async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
 
+  const { desde, hasta, metodo_pago, estado_factura } = req.query;
+  const numero_mesa = req.query.numero_mesa !== undefined ? parseInt(req.query.numero_mesa, 10) : undefined;
+
+  if (desde !== undefined && !FECHA_REGEX.test(desde))
+    return res.status(400).json({ error: '"desde" debe tener formato YYYY-MM-DD.' });
+  if (hasta !== undefined && !FECHA_REGEX.test(hasta))
+    return res.status(400).json({ error: '"hasta" debe tener formato YYYY-MM-DD.' });
+  if (desde && hasta && desde > hasta)
+    return res.status(400).json({ error: '"desde" no puede ser posterior a "hasta".' });
+  if (req.query.numero_mesa !== undefined && (isNaN(numero_mesa) || numero_mesa <= 0))
+    return res.status(400).json({ error: '"numero_mesa" debe ser un entero positivo.' });
+  if (metodo_pago !== undefined && !METODOS_PAGO_VALIDOS.includes(metodo_pago))
+    return res.status(400).json({ error: `"metodo_pago" debe ser uno de: ${METODOS_PAGO_VALIDOS.join(', ')}.` });
+  if (estado_factura !== undefined && !ESTADOS_FACTURA_VALIDOS.includes(estado_factura))
+    return res.status(400).json({ error: `"estado_factura" debe ser uno de: ${ESTADOS_FACTURA_VALIDOS.join(', ')}.` });
+
   try {
-    const { rows, total } = await Pedido.getHistorial(page, limit);
+    const { rows, total } = await Pedido.getHistorial(page, limit, {
+      desde, hasta, numero_mesa, metodo_pago, estado_factura,
+    });
     res.json({
       pedidos: rows,
       total,

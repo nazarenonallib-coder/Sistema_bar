@@ -101,8 +101,20 @@ const addProductos = async (pedido_id, productos, conn) => {
 };
 
 // Paginado: con más uso el historial crece indefinidamente, así que nunca se trae completo.
-const getHistorial = async (page, limit) => {
+// filtros admitidos: desde/hasta (fecha_cierre, 'YYYY-MM-DD'), numero_mesa, metodo_pago, estado_factura.
+const getHistorial = async (page, limit, filtros = {}) => {
+  const { desde, hasta, numero_mesa, metodo_pago, estado_factura } = filtros;
   const offset = (page - 1) * limit;
+
+  const condiciones = [`p.estado = 'finalizado'`];
+  const params = [];
+  if (desde) { condiciones.push('p.fecha_cierre >= ?'); params.push(`${desde} 00:00:00`); }
+  if (hasta) { condiciones.push('p.fecha_cierre <= ?'); params.push(`${hasta} 23:59:59`); }
+  if (numero_mesa) { condiciones.push('m.numero_mesa = ?'); params.push(numero_mesa); }
+  if (metodo_pago) { condiciones.push('f.metodo_pago = ?'); params.push(metodo_pago); }
+  if (estado_factura) { condiciones.push('f.estado = ?'); params.push(estado_factura); }
+  const whereSql = `WHERE ${condiciones.join(' AND ')}`;
+
   const [rows] = await pool.query(
     `SELECT p.id, p.mesa_id, m.numero_mesa, p.estado, p.total,
             p.sesion_apertura, p.fecha_creacion, p.fecha_cierre,
@@ -110,13 +122,18 @@ const getHistorial = async (page, limit) => {
      FROM pedidos p
      JOIN mesas m ON p.mesa_id = m.id
      ${FACTURA_JOIN}
-     WHERE p.estado = 'finalizado'
+     ${whereSql}
      ORDER BY p.fecha_cierre DESC, p.fecha_creacion DESC
      LIMIT ? OFFSET ?`,
-    [limit, offset]
+    [...params, limit, offset]
   );
   const [[{ total }]] = await pool.query(
-    "SELECT COUNT(*) AS total FROM pedidos WHERE estado = 'finalizado'"
+    `SELECT COUNT(*) AS total
+     FROM pedidos p
+     JOIN mesas m ON p.mesa_id = m.id
+     ${FACTURA_JOIN}
+     ${whereSql}`,
+    params
   );
   return { rows, total };
 };

@@ -115,8 +115,11 @@ export const marcarItemEntregado = (pedido_id, item_id, entregado) =>
   request(`/pedidos/${pedido_id}/productos/${item_id}/entregado`, { method: 'PATCH', body: { entregado } })
 export const marcarPedidoEntregado = (pedido_id, entregado) =>
   request(`/pedidos/${pedido_id}/entregado`, { method: 'PATCH', body: { entregado } })
-export const getHistorialPedidos = (page = 1, limit = 20) =>
-  request(`/pedidos/historial?page=${page}&limit=${limit}`)
+export const getHistorialPedidos = (page = 1, limit = 20, filtros = {}) => {
+  const params = new URLSearchParams({ page, limit })
+  Object.entries(filtros).forEach(([k, v]) => { if (v) params.set(k, v) })
+  return request(`/pedidos/historial?${params}`)
+}
 export const getPedido           = (id) => request(`/pedidos/${id}`)
 
 // Facturación (ARCA / ex AFIP)

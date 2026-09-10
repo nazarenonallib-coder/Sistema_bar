@@ -28,6 +28,23 @@ const comprobanteClase = (p) => {
 
 const LIMIT = 20
 
+const METODOS_PAGO = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'tarjeta_debito', label: 'Tarjeta débito' },
+  { value: 'tarjeta_credito', label: 'Tarjeta crédito' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'otro', label: 'Otro' },
+]
+
+const ESTADOS_FACTURA = [
+  { value: 'aprobada', label: 'Aprobada' },
+  { value: 'pendiente', label: 'Pendiente' },
+  { value: 'rechazada', label: 'Rechazada' },
+  { value: 'error', label: 'Error ARCA' },
+]
+
+const FILTROS_VACIOS = { desde: '', hasta: '', numero_mesa: '', metodo_pago: '', estado_factura: '' }
+
 export default function HistorialPedidos({ addToast }) {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +53,25 @@ export default function HistorialPedidos({ addToast }) {
   const [page, setPage] = useState(1)
   const [totalPaginas, setTotalPaginas] = useState(1)
   const [mostrarReporte, setMostrarReporte] = useState(false)
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS)
+  const [filtrosAplicados, setFiltrosAplicados] = useState(FILTROS_VACIOS)
+
+  const hayFiltrosActivos = Object.values(filtrosAplicados).some(Boolean)
+
+  const handleAplicarFiltros = () => {
+    if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
+      addToast('La fecha "desde" no puede ser posterior a "hasta".', 'error')
+      return
+    }
+    setPage(1)
+    setFiltrosAplicados(filtros)
+  }
+
+  const handleLimpiarFiltros = () => {
+    setFiltros(FILTROS_VACIOS)
+    setFiltrosAplicados(FILTROS_VACIOS)
+    setPage(1)
+  }
 
   const handleDescargarTicket = async (pedido) => {
     setDescargandoId(pedido.id)
@@ -55,7 +91,7 @@ export default function HistorialPedidos({ addToast }) {
   const fetchHistorial = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await api.getHistorialPedidos(page, LIMIT)
+      const data = await api.getHistorialPedidos(page, LIMIT, filtrosAplicados)
       setPedidos(data.pedidos)
       setTotalPaginas(data.total_paginas)
     } catch (err) {
@@ -63,7 +99,7 @@ export default function HistorialPedidos({ addToast }) {
     } finally {
       setLoading(false)
     }
-  }, [addToast, page])
+  }, [addToast, page, filtrosAplicados])
 
   useEffect(() => { fetchHistorial() }, [fetchHistorial])
 
@@ -79,13 +115,87 @@ export default function HistorialPedidos({ addToast }) {
         </button>
       </div>
 
+      <div className="bg-white rounded-2xl shadow-sm border p-4 mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Desde</label>
+            <input
+              type="date"
+              value={filtros.desde}
+              max={filtros.hasta || undefined}
+              onChange={(e) => setFiltros(f => ({ ...f, desde: e.target.value }))}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Hasta</label>
+            <input
+              type="date"
+              value={filtros.hasta}
+              min={filtros.desde || undefined}
+              onChange={(e) => setFiltros(f => ({ ...f, hasta: e.target.value }))}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Mesa</label>
+            <input
+              type="number"
+              min="1"
+              placeholder="N°"
+              value={filtros.numero_mesa}
+              onChange={(e) => setFiltros(f => ({ ...f, numero_mesa: e.target.value }))}
+              className="border rounded-lg px-3 py-1.5 text-sm w-20"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Método de pago</label>
+            <select
+              value={filtros.metodo_pago}
+              onChange={(e) => setFiltros(f => ({ ...f, metodo_pago: e.target.value }))}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="">Todos</option>
+              {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Comprobante</label>
+            <select
+              value={filtros.estado_factura}
+              onChange={(e) => setFiltros(f => ({ ...f, estado_factura: e.target.value }))}
+              className="border rounded-lg px-3 py-1.5 text-sm"
+            >
+              <option value="">Todos</option>
+              {ESTADOS_FACTURA.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleAplicarFiltros}
+              className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
+            >
+              Filtrar
+            </button>
+            {hayFiltrosActivos && (
+              <button
+                onClick={handleLimpiarFiltros}
+                className="px-4 py-1.5 rounded-lg border text-gray-600 text-sm font-semibold hover:bg-gray-50 transition"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-16"><Spinner size="lg" /></div>
         ) : pedidos.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <p className="text-5xl mb-3">🧾</p>
-            <p>Todavía no hay cuentas cerradas.</p>
+            <p>{hayFiltrosActivos ? 'No hay cuentas cerradas que coincidan con los filtros.' : 'Todavía no hay cuentas cerradas.'}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
