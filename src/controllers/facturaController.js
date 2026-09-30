@@ -4,6 +4,9 @@ const afipService = require('../services/afipService');
 const afipConfig = require('../config/afipConfig');
 const { generarFacturaPDF } = require('../services/facturaPdfService');
 const logger = require('../utils/logger');
+const { enviarReporte, desglose, FORMATOS_VALIDOS, FORMATO_POR_DEFECTO } = require('../services/reporteService');
+const { TIPO_COMPROBANTE_LABEL, METODO_PAGO_LABEL, etiqueta } = require('../utils/etiquetas');
+const { esFechaISO } = require('../utils/validaciones');
 
 const TIPOS_POR_CONDICION = {
   monotributista: [{ tipo_comprobante: 11, nombre: 'Factura C' }],
@@ -120,57 +123,80 @@ const reintentar = async (req, res) => {
   }
 };
 
-const TIPO_COMPROBANTE_LABEL = { 1: 'Factura A', 6: 'Factura B', 11: 'Factura C' };
-const METODO_PAGO_LABEL = {
-  efectivo: 'Efectivo',
-  tarjeta_debito: 'Tarjeta débito',
-  tarjeta_credito: 'Tarjeta crédito',
-  transferencia: 'Transferencia',
-  otro: 'Otro',
-};
 
-// Escapa un valor para CSV: si contiene coma, comilla o salto de línea hay que encomillarlo y
-// duplicar las comillas internas (RFC 4180).
-const csvCell = (valor) => {
-  const texto = valor === null || valor === undefined ? '' : String(valor);
-  return /[",\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
-};
+const COLUMNAS_REPORTE = [
+  { key: 'fecha', label: 'Fecha', tipo: 'fecha', ancho: 17 },
+  { key: 'comprobante', label: 'Comprobante', tipo: 'texto', ancho: 13 },
+  { key: 'punto_venta', label: 'Punto de Venta', tipo: 'texto', ancho: 11 },
+  { key: 'numero', label: 'Número', tipo: 'texto', ancho: 11 },
+  { key: 'mesa', label: 'Mesa', tipo: 'texto', ancho: 9 },
+  { key: 'metodo_pago', label: 'Método de Pago', tipo: 'texto', ancho: 14 },
+  { key: 'neto', label: 'Neto', tipo: 'moneda', ancho: 12 },
+  { key: 'iva', label: 'IVA', tipo: 'moneda', ancho: 12 },
+  { key: 'total', label: 'Total', tipo: 'moneda', ancho: 12 },
+  { key: 'cae', label: 'CAE', tipo: 'texto', ancho: 16 },
+];
 
-// Reporte contable de ventas ya facturadas (con CAE aprobado ante ARCA) en un rango de fechas.
-// Se descarga como CSV para que el dueño se lo pueda pasar al contador o abrir en Excel.
+// Reporte contable de ventas ya facturadas (con CAE aprobado ante ARCA) en un rango de fechas,
+// para que el dueño se lo pase al contador. Se puede bajar en csv, xlsx, pdf o json.
 const getReporte = async (req, res) => {
   const { desde, hasta } = req.query;
+
+  if (desde !== undefined && !esFechaISO(desde))
+    return res.status(400).json({ error: '"desde" debe tener formato YYYY-MM-DD.' });
+  if (hasta !== undefined && !esFechaISO(hasta))
+    return res.status(400).json({ error: '"hasta" debe tener formato YYYY-MM-DD.' });
+  if (desde && hasta && desde > hasta)
+    return res.status(400).json({ error: '"desde" no puede ser posterior a "hasta".' });
+
+  const formato = req.query.formato || FORMATO_POR_DEFECTO;
+  if (!FORMATOS_VALIDOS.includes(formato))
+    return res.status(400).json({ error: `"formato" debe ser uno de: ${FORMATOS_VALIDOS.join(', ')}.` });
 
   try {
     const facturas = await Factura.getVentasFacturadas(desde || null, hasta || null);
 
-    const encabezado = [
-      'Fecha', 'Comprobante', 'Punto de Venta', 'Número', 'Mesa', 'Método de Pago',
-      'Neto', 'IVA', 'Total', 'CAE',
+    const filas = facturas.map((f) => ({
+      fecha: f.fecha_emision,
+      comprobante: etiqueta(TIPO_COMPROBANTE_LABEL, f.tipo_comprobante),
+      punto_venta: String(f.punto_venta).padStart(4, '0'),
+      numero: String(f.numero).padStart(8, '0'),
+      mesa: `Mesa ${f.numero_mesa}`,
+      metodo_pago: etiqueta(METODO_PAGO_LABEL, f.metodo_pago),
+      neto: f.importe_neto,
+      iva: f.importe_iva,
+      total: f.importe_total,
+      cae: f.cae,
+    }));
+
+    // Antes el total iba como una fila "TOTAL" pegada al final del CSV; ahora es un bloque de
+    // resumen, así que aparece en los cuatro formatos y no ensucia la tabla de datos.
+    const resumen = [
+      { label: 'Comprobantes emitidos', valor: facturas.length, tipo: 'numero' },
+      { label: 'Total facturado', valor: facturas.reduce((acc, f) => acc + Number(f.importe_total), 0), tipo: 'moneda' },
+      { label: 'Total neto', valor: facturas.reduce((acc, f) => acc + Number(f.importe_neto), 0), tipo: 'moneda' },
+      { label: 'Total IVA', valor: facturas.reduce((acc, f) => acc + Number(f.importe_iva), 0), tipo: 'moneda' },
+      ...desglose('Por tipo de comprobante', facturas, (f) => etiqueta(TIPO_COMPROBANTE_LABEL, f.tipo_comprobante), (f) => f.importe_total),
+      ...desglose('Por método de pago', facturas, (f) => etiqueta(METODO_PAGO_LABEL, f.metodo_pago, 'Sin registrar'), (f) => f.importe_total),
     ];
-    const filas = facturas.map((f) => [
-      csvCell(new Date(f.fecha_emision).toLocaleString('es-AR', { hour12: false })),
-      csvCell(TIPO_COMPROBANTE_LABEL[f.tipo_comprobante] || f.tipo_comprobante),
-      csvCell(String(f.punto_venta).padStart(4, '0')),
-      csvCell(String(f.numero).padStart(8, '0')),
-      csvCell(f.numero_mesa),
-      csvCell(METODO_PAGO_LABEL[f.metodo_pago] || f.metodo_pago),
-      csvCell(Number(f.importe_neto).toFixed(2)),
-      csvCell(Number(f.importe_iva).toFixed(2)),
-      csvCell(Number(f.importe_total).toFixed(2)),
-      csvCell(f.cae),
-    ].join(','));
 
-    const totalVentas = facturas.reduce((acc, f) => acc + Number(f.importe_total), 0);
-    filas.push(['', '', '', '', '', 'TOTAL', '', '', csvCell(totalVentas.toFixed(2)), ''].join(','));
+    const filtros = [
+      { label: 'Desde', valor: desde || 'inicio del historial' },
+      { label: 'Hasta', valor: hasta || 'hoy' },
+      { label: 'Comprobantes', valor: 'Solo aprobados por ARCA (con CAE)' },
+    ];
 
-    const csv = '﻿' + [encabezado.join(','), ...filas].join('\r\n');
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="reporte-ventas-facturadas.csv"`);
-    res.send(csv);
+    await enviarReporte(res, {
+      titulo: 'Reporte de ventas facturadas',
+      subtitulo: `Del ${desde || 'inicio'} al ${hasta || 'hoy'}`,
+      filtros,
+      resumen,
+      hojas: [{ nombre: 'Ventas facturadas', columnas: COLUMNAS_REPORTE, filas }],
+    }, formato, `reporte-ventas-facturadas-${desde || 'inicio'}_a_${hasta || 'hoy'}`);
   } catch (err) {
     logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    // pdf y xlsx van en streaming: si ya salieron cabeceras, no se puede cambiar el status.
+    if (res.headersSent) return res.end();
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };

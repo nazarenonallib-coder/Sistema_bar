@@ -111,13 +111,14 @@ const SORT_COLUMNAS = {
   total: 'p.total',
 };
 
-// Paginado: con más uso el historial crece indefinidamente, así que nunca se trae completo.
+// Armado del WHERE/ORDER BY del historial, compartido por la consulta paginada de la pantalla y
+// por la del reporte exportable: si los filtros se armaran dos veces, el archivo descargado podría
+// no coincidir con lo que el usuario ve en la tabla.
 // filtros admitidos: desde/hasta (fecha_cierre, 'YYYY-MM-DD'), numero_mesa, metodo_pago,
 // estado_factura, con_factura ('si'|'no' — si la cuenta se facturó ante ARCA o se cerró solo con
 // ticket), sort (clave de SORT_COLUMNAS), order ('asc'|'desc').
-const getHistorial = async (page, limit, filtros = {}) => {
+const construirConsultaHistorial = (filtros = {}) => {
   const { desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura, sort, order } = filtros;
-  const offset = (page - 1) * limit;
 
   const condiciones = [`p.estado = 'finalizado'`];
   const params = [];
@@ -128,12 +129,19 @@ const getHistorial = async (page, limit, filtros = {}) => {
   if (estado_factura) { condiciones.push('f.estado = ?'); params.push(estado_factura); }
   if (con_factura === 'si') condiciones.push('f.id IS NOT NULL');
   if (con_factura === 'no') condiciones.push('f.id IS NULL');
-  const whereSql = `WHERE ${condiciones.join(' AND ')}`;
 
   const ordenDireccion = order === 'asc' ? 'ASC' : 'DESC';
   const ordenSql = SORT_COLUMNAS[sort]
     ? `ORDER BY ${SORT_COLUMNAS[sort]} ${ordenDireccion}`
     : `ORDER BY p.fecha_cierre DESC, p.fecha_creacion DESC`;
+
+  return { whereSql: `WHERE ${condiciones.join(' AND ')}`, params, ordenSql };
+};
+
+// Paginado: con más uso el historial crece indefinidamente, así que nunca se trae completo.
+const getHistorial = async (page, limit, filtros = {}) => {
+  const offset = (page - 1) * limit;
+  const { whereSql, params, ordenSql } = construirConsultaHistorial(filtros);
 
   const [rows] = await pool.query(
     `SELECT p.id, p.mesa_id, m.numero_mesa, p.estado, p.total,
@@ -156,6 +164,29 @@ const getHistorial = async (page, limit, filtros = {}) => {
     params
   );
   return { rows, total };
+};
+
+// Mismo resultado que getHistorial pero sin paginar, para exportar el historial filtrado completo
+// (el archivo tiene que traer todas las filas que coinciden, no las 20 de la página en pantalla).
+// `maxFilas` es un tope de seguridad: se pide una fila extra para que el controller pueda detectar
+// que el rango elegido se pasó del límite y pedirle al usuario que lo acote, en vez de armar un
+// archivo gigante en memoria.
+const getHistorialCompleto = async (filtros = {}, maxFilas = 5000) => {
+  const { whereSql, params, ordenSql } = construirConsultaHistorial(filtros);
+
+  const [rows] = await pool.query(
+    `SELECT p.id, p.mesa_id, m.numero_mesa, p.estado, p.total,
+            p.sesion_apertura, p.fecha_creacion, p.fecha_cierre,
+            ${HORA_CIERRE_MESA_SUBQUERY}, ${FACTURA_COLUMNAS}
+     FROM pedidos p
+     JOIN mesas m ON p.mesa_id = m.id
+     ${FACTURA_JOIN}
+     ${whereSql}
+     ${ordenSql}
+     LIMIT ?`,
+    [...params, maxFilas + 1]
+  );
+  return rows;
 };
 
 // Agrupa las ventas cerradas por hora (tipo='dia') o por día (tipo='semana'/'mes') para graficar.
@@ -311,6 +342,7 @@ module.exports = {
   cerrarPedidosMesa,
   cerrarPedidoIndividual,
   getHistorial,
+  getHistorialCompleto,
   getEstadisticas,
   SORT_CAMPOS_VALIDOS: Object.keys(SORT_COLUMNAS),
   getItems,

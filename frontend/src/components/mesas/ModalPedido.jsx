@@ -3,7 +3,7 @@ import * as api from '../../api'
 import Spinner from '../Spinner'
 import BuscadorProducto from './BuscadorProducto'
 import CierreCuentaModal from './CierreCuentaModal'
-import { imprimirTicket, descargarTicket } from '../../utils/ticket'
+import { imprimirTicket, descargarArchivo } from '../../utils/ticket'
 
 const formatHora = (fecha) =>
   fecha ? new Date(fecha).toLocaleString('es-AR', { hour12: false }) : '—'
@@ -205,7 +205,7 @@ export default function ModalPedido({ mesa, productos, onClose, onMesaUpdate, ad
   const handleDescargarTicket = async () => {
     setTicketBusy(true)
     try {
-      await descargarTicket(ticketPrompt.url, ticketPrompt.filename)
+      await descargarArchivo(ticketPrompt.url, ticketPrompt.filename)
       if (ticketPrompt.cierre) await confirmarLiberacionMesa()
     } catch (err) {
       addToast(err.message, 'error')
@@ -220,7 +220,7 @@ export default function ModalPedido({ mesa, productos, onClose, onMesaUpdate, ad
   const handleDescargarTicketInterno = async () => {
     setTicketBusy(true)
     try {
-      await descargarTicket(`${ticketPrompt.url}?tipo=interno`, `interno-${ticketPrompt.filename}`)
+      await descargarArchivo(`${ticketPrompt.url}?tipo=interno`, `interno-${ticketPrompt.filename}`)
     } catch (err) {
       addToast(err.message, 'error')
     } finally {

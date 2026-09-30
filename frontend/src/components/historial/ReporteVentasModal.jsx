@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { descargarTicket } from '../../utils/ticket'
+import { descargarArchivo } from '../../utils/ticket'
+import FormatoArchivoSelector from './FormatoArchivoSelector'
+import { formatoPorValue } from './constantes'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
-// Descarga un CSV con las ventas ya facturadas (CAE aprobado) en el rango de fechas elegido, para
-// que el dueño se lo pase al contador. Reutiliza descargarTicket porque, más allá del nombre, esa
-// función solo hace fetch-con-token + guardar-blob: sirve igual para cualquier archivo.
+// Descarga el reporte contable: las ventas ya facturadas (CAE aprobado) en el rango de fechas
+// elegido, para que el dueño se lo pase al contador. Reutiliza descargarArchivo porque esa
+// función solo hace fetch-con-token + guardar-blob: sirve igual para cualquier formato.
 export default function ReporteVentasModal({ onClose, addToast }) {
   const [desde, setDesde] = useState(hoyISO())
   const [hasta, setHasta] = useState(hoyISO())
+  const [formato, setFormato] = useState('csv')
   const [generando, setGenerando] = useState(false)
 
   const handleGenerar = async () => {
@@ -18,8 +21,9 @@ export default function ReporteVentasModal({ onClose, addToast }) {
     }
     setGenerando(true)
     try {
-      const params = new URLSearchParams({ desde, hasta })
-      await descargarTicket(`/api/facturas/reporte?${params}`, `reporte-ventas-${desde}_a_${hasta}.csv`)
+      const params = new URLSearchParams({ desde, hasta, formato })
+      const { ext } = formatoPorValue(formato)
+      await descargarArchivo(`/api/facturas/reporte?${params}`, `reporte-ventas-${desde}_a_${hasta}.${ext}`)
       onClose()
     } catch (err) {
       addToast(err.message, 'error')
@@ -41,7 +45,8 @@ export default function ReporteVentasModal({ onClose, addToast }) {
 
         <div className="p-6 space-y-4">
           <p className="text-sm text-gray-500">
-            Se exportan en CSV las ventas con comprobante aprobado por ARCA en el rango elegido.
+            Se exportan las ventas con comprobante aprobado por ARCA en el rango elegido, con un
+            resumen por tipo de comprobante y método de pago.
           </p>
 
           <div>
@@ -66,6 +71,8 @@ export default function ReporteVentasModal({ onClose, addToast }) {
             />
           </div>
 
+          <FormatoArchivoSelector value={formato} onChange={setFormato} disabled={generando} />
+
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={onClose}
@@ -78,7 +85,7 @@ export default function ReporteVentasModal({ onClose, addToast }) {
               disabled={generando}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-50"
             >
-              {generando ? 'Generando…' : '⬇ Descargar CSV'}
+              {generando ? 'Generando…' : `⬇ Descargar ${formatoPorValue(formato).label}`}
             </button>
           </div>
         </div>

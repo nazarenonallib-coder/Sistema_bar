@@ -3,8 +3,10 @@ import * as api from '../../api'
 import Spinner from '../Spinner'
 import DetallePedidoModal from './DetallePedidoModal'
 import ReporteVentasModal from './ReporteVentasModal'
+import ReporteHistorialModal from './ReporteHistorialModal'
 import GraficosVentas from './GraficosVentas'
-import { descargarTicket } from '../../utils/ticket'
+import { descargarArchivo } from '../../utils/ticket'
+import { METODOS_PAGO, ESTADOS_FACTURA, FILTROS_VACIOS } from './constantes'
 
 const formatHora = (fecha) =>
   fecha ? new Date(fecha).toLocaleString('es-AR', { hour12: false }) : '—'
@@ -29,23 +31,6 @@ const comprobanteClase = (p) => {
 
 const LIMIT = 20
 
-const METODOS_PAGO = [
-  { value: 'efectivo', label: 'Efectivo' },
-  { value: 'tarjeta_debito', label: 'Tarjeta débito' },
-  { value: 'tarjeta_credito', label: 'Tarjeta crédito' },
-  { value: 'transferencia', label: 'Transferencia' },
-  { value: 'otro', label: 'Otro' },
-]
-
-const ESTADOS_FACTURA = [
-  { value: 'aprobada', label: 'Aprobada' },
-  { value: 'pendiente', label: 'Pendiente' },
-  { value: 'rechazada', label: 'Rechazada' },
-  { value: 'error', label: 'Error ARCA' },
-]
-
-const FILTROS_VACIOS = { desde: '', hasta: '', numero_mesa: '', metodo_pago: '', estado_factura: '', con_factura: '' }
-
 export default function HistorialPedidos({ addToast }) {
   const [pedidos, setPedidos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -55,6 +40,7 @@ export default function HistorialPedidos({ addToast }) {
   const [totalPaginas, setTotalPaginas] = useState(1)
   const [mostrarReporte, setMostrarReporte] = useState(false)
   const [mostrarGraficos, setMostrarGraficos] = useState(false)
+  const [mostrarExportar, setMostrarExportar] = useState(false)
   const [filtros, setFiltros] = useState(FILTROS_VACIOS)
   const [filtrosAplicados, setFiltrosAplicados] = useState(FILTROS_VACIOS)
   const [sort, setSort] = useState('fecha_cierre')
@@ -93,9 +79,9 @@ export default function HistorialPedidos({ addToast }) {
     setDescargandoId(pedido.id)
     try {
       if (pedido.factura_id && pedido.factura_estado === 'aprobada') {
-        await descargarTicket(`/api/facturas/${pedido.factura_id}/pdf`, `factura-${pedido.factura_numero}.pdf`)
+        await descargarArchivo(`/api/facturas/${pedido.factura_id}/pdf`, `factura-${pedido.factura_numero}.pdf`)
       } else {
-        await descargarTicket(`/api/pedidos/${pedido.id}/ticket`, `ticket-pedido-${pedido.id}.pdf`)
+        await descargarArchivo(`/api/pedidos/${pedido.id}/ticket`, `ticket-pedido-${pedido.id}.pdf`)
       }
     } catch (err) {
       addToast(err.message, 'error')
@@ -131,6 +117,12 @@ export default function HistorialPedidos({ addToast }) {
             }`}
           >
             📈 Gráficos de ventas
+          </button>
+          <button
+            onClick={() => setMostrarExportar(true)}
+            className="px-4 py-2 rounded-lg bg-white text-indigo-600 border border-indigo-200 text-sm font-semibold hover:bg-indigo-50 transition flex items-center gap-2"
+          >
+            📥 Exportar historial filtrado
           </button>
           <button
             onClick={() => setMostrarReporte(true)}
@@ -350,6 +342,16 @@ export default function HistorialPedidos({ addToast }) {
 
       {mostrarReporte && (
         <ReporteVentasModal onClose={() => setMostrarReporte(false)} addToast={addToast} />
+      )}
+
+      {mostrarExportar && (
+        <ReporteHistorialModal
+          filtrosAplicados={filtrosAplicados}
+          sort={sort}
+          order={order}
+          onClose={() => setMostrarExportar(false)}
+          addToast={addToast}
+        />
       )}
     </div>
   )

@@ -45,8 +45,9 @@ export const imprimirTicket = async (ticketUrl) => {
   }, 60000)
 }
 
-// Descarga el PDF del ticket con el nombre de archivo indicado.
-export const descargarTicket = async (ticketUrl, filename) => {
+// Descarga cualquier archivo servido por la API (ticket o factura en PDF, reporte en
+// csv/xlsx/pdf/json) con el nombre indicado.
+export const descargarArchivo = async (ticketUrl, filename) => {
   const blob = await fetchTicketBlob(ticketUrl)
   const url = URL.createObjectURL(blob)
 

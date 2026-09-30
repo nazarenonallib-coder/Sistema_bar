@@ -4,6 +4,11 @@ const Pedido = require('../models/pedidoModel');
 const Producto = require('../models/productoModel');
 const Insumo = require('../models/insumoModel');
 const logger = require('../utils/logger');
+const { enviarReporte, desglose, FORMATOS_VALIDOS, FORMATO_POR_DEFECTO } = require('../services/reporteService');
+const { esFechaISO } = require('../utils/validaciones');
+const {
+  TIPO_COMPROBANTE_LABEL, METODO_PAGO_LABEL, ESTADO_FACTURA_LABEL, etiqueta,
+} = require('../utils/etiquetas');
 
 const create = async (req, res) => {
   const { mesa_id } = req.body;
@@ -357,38 +362,45 @@ const marcarPedidoEntregado = async (req, res) => {
 
 const METODOS_PAGO_VALIDOS = ['efectivo', 'tarjeta_debito', 'tarjeta_credito', 'transferencia', 'otro'];
 const ESTADOS_FACTURA_VALIDOS = ['pendiente', 'aprobada', 'rechazada', 'error'];
-const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// Valida los filtros del historial y devuelve `{ error }` o `{ filtros }`. La comparte la consulta
+// paginada de la pantalla con la del reporte exportable: el reporte tiene que aceptar exactamente
+// los mismos filtros que la tabla, ni más ni menos.
+const validarFiltrosHistorial = (req) => {
+  const { desde, hasta, metodo_pago, estado_factura, con_factura, sort, order } = req.query;
+  const numero_mesa = req.query.numero_mesa !== undefined ? parseInt(req.query.numero_mesa, 10) : undefined;
+
+  if (desde !== undefined && !esFechaISO(desde))
+    return { error: '"desde" debe tener formato YYYY-MM-DD.' };
+  if (hasta !== undefined && !esFechaISO(hasta))
+    return { error: '"hasta" debe tener formato YYYY-MM-DD.' };
+  if (desde && hasta && desde > hasta)
+    return { error: '"desde" no puede ser posterior a "hasta".' };
+  if (req.query.numero_mesa !== undefined && (isNaN(numero_mesa) || numero_mesa <= 0))
+    return { error: '"numero_mesa" debe ser un entero positivo.' };
+  if (metodo_pago !== undefined && !METODOS_PAGO_VALIDOS.includes(metodo_pago))
+    return { error: `"metodo_pago" debe ser uno de: ${METODOS_PAGO_VALIDOS.join(', ')}.` };
+  if (estado_factura !== undefined && !ESTADOS_FACTURA_VALIDOS.includes(estado_factura))
+    return { error: `"estado_factura" debe ser uno de: ${ESTADOS_FACTURA_VALIDOS.join(', ')}.` };
+  if (con_factura !== undefined && !['si', 'no'].includes(con_factura))
+    return { error: '"con_factura" debe ser "si" o "no".' };
+  if (sort !== undefined && !Pedido.SORT_CAMPOS_VALIDOS.includes(sort))
+    return { error: `"sort" debe ser uno de: ${Pedido.SORT_CAMPOS_VALIDOS.join(', ')}.` };
+  if (order !== undefined && !['asc', 'desc'].includes(order))
+    return { error: '"order" debe ser "asc" o "desc".' };
+
+  return { filtros: { desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura, sort, order } };
+};
 
 const getHistorial = async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
 
-  const { desde, hasta, metodo_pago, estado_factura, con_factura, sort, order } = req.query;
-  const numero_mesa = req.query.numero_mesa !== undefined ? parseInt(req.query.numero_mesa, 10) : undefined;
-
-  if (desde !== undefined && !FECHA_REGEX.test(desde))
-    return res.status(400).json({ error: '"desde" debe tener formato YYYY-MM-DD.' });
-  if (hasta !== undefined && !FECHA_REGEX.test(hasta))
-    return res.status(400).json({ error: '"hasta" debe tener formato YYYY-MM-DD.' });
-  if (desde && hasta && desde > hasta)
-    return res.status(400).json({ error: '"desde" no puede ser posterior a "hasta".' });
-  if (req.query.numero_mesa !== undefined && (isNaN(numero_mesa) || numero_mesa <= 0))
-    return res.status(400).json({ error: '"numero_mesa" debe ser un entero positivo.' });
-  if (metodo_pago !== undefined && !METODOS_PAGO_VALIDOS.includes(metodo_pago))
-    return res.status(400).json({ error: `"metodo_pago" debe ser uno de: ${METODOS_PAGO_VALIDOS.join(', ')}.` });
-  if (estado_factura !== undefined && !ESTADOS_FACTURA_VALIDOS.includes(estado_factura))
-    return res.status(400).json({ error: `"estado_factura" debe ser uno de: ${ESTADOS_FACTURA_VALIDOS.join(', ')}.` });
-  if (con_factura !== undefined && !['si', 'no'].includes(con_factura))
-    return res.status(400).json({ error: '"con_factura" debe ser "si" o "no".' });
-  if (sort !== undefined && !Pedido.SORT_CAMPOS_VALIDOS.includes(sort))
-    return res.status(400).json({ error: `"sort" debe ser uno de: ${Pedido.SORT_CAMPOS_VALIDOS.join(', ')}.` });
-  if (order !== undefined && !['asc', 'desc'].includes(order))
-    return res.status(400).json({ error: '"order" debe ser "asc" o "desc".' });
+  const { error, filtros } = validarFiltrosHistorial(req);
+  if (error) return res.status(400).json({ error });
 
   try {
-    const { rows, total } = await Pedido.getHistorial(page, limit, {
-      desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura, sort, order,
-    });
+    const { rows, total } = await Pedido.getHistorial(page, limit, filtros);
     res.json({
       pedidos: rows,
       total,
@@ -398,6 +410,161 @@ const getHistorial = async (req, res) => {
     });
   } catch (err) {
     logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
+  }
+};
+
+// Tope de filas del reporte exportable: más que esto no se arma en memoria, se le pide al usuario
+// que acote el rango de fechas. Para una cafetería son varios meses de ventas.
+const MAX_FILAS_REPORTE = 5000;
+
+// Columnas de la hoja principal: las mismas que muestra la tabla del historial, más los datos
+// fiscales que ya vienen pegados al pedido por el LEFT JOIN con facturas.
+const COLUMNAS_VENTAS = [
+  { key: 'id', label: '#', tipo: 'numero', ancho: 6 },
+  { key: 'mesa', label: 'Mesa', tipo: 'texto', ancho: 10 },
+  { key: 'sesion_apertura', label: 'Apertura mesa', tipo: 'fecha', ancho: 17 },
+  { key: 'fecha_creacion', label: 'Apertura silla', tipo: 'fecha', ancho: 17 },
+  { key: 'fecha_cierre', label: 'Cierre silla', tipo: 'fecha', ancho: 17 },
+  { key: 'hora_cierre_mesa', label: 'Cierre mesa', tipo: 'fecha', ancho: 17 },
+  { key: 'comprobante', label: 'Comprobante', tipo: 'texto', ancho: 13 },
+  { key: 'estado_comprobante', label: 'Estado comp.', tipo: 'texto', ancho: 11 },
+  { key: 'punto_venta', label: 'Pto. Vta.', tipo: 'texto', ancho: 9 },
+  { key: 'numero', label: 'Número', tipo: 'texto', ancho: 11 },
+  { key: 'cae', label: 'CAE', tipo: 'texto', ancho: 15 },
+  { key: 'metodo_pago', label: 'Método de pago', tipo: 'texto', ancho: 13 },
+  { key: 'neto', label: 'Neto', tipo: 'moneda', ancho: 11 },
+  { key: 'iva', label: 'IVA', tipo: 'moneda', ancho: 11 },
+  { key: 'total', label: 'Total', tipo: 'moneda', ancho: 11 },
+];
+
+const COLUMNAS_ITEMS = [
+  { key: 'pedido_id', label: 'Pedido #', tipo: 'numero', ancho: 8 },
+  { key: 'mesa', label: 'Mesa', tipo: 'texto', ancho: 10 },
+  { key: 'fecha_cierre', label: 'Cierre silla', tipo: 'fecha', ancho: 17 },
+  { key: 'producto', label: 'Producto', tipo: 'texto', ancho: 28 },
+  { key: 'cantidad', label: 'Cantidad', tipo: 'numero', ancho: 9 },
+  { key: 'precio_unitario', label: 'Precio unit.', tipo: 'moneda', ancho: 12 },
+  { key: 'subtotal', label: 'Subtotal', tipo: 'moneda', ancho: 12 },
+];
+
+const filaVenta = (p) => ({
+  id: p.id,
+  mesa: `Mesa ${p.numero_mesa}`,
+  sesion_apertura: p.sesion_apertura,
+  fecha_creacion: p.fecha_creacion,
+  fecha_cierre: p.fecha_cierre,
+  hora_cierre_mesa: p.hora_cierre_mesa,
+  comprobante: p.factura_id ? etiqueta(TIPO_COMPROBANTE_LABEL, p.tipo_comprobante) : 'Sin factura (ticket)',
+  estado_comprobante: p.factura_id ? etiqueta(ESTADO_FACTURA_LABEL, p.factura_estado) : '—',
+  punto_venta: p.factura_punto_venta ? String(p.factura_punto_venta).padStart(4, '0') : '',
+  numero: p.factura_numero ? String(p.factura_numero).padStart(8, '0') : '',
+  cae: p.cae || '',
+  metodo_pago: etiqueta(METODO_PAGO_LABEL, p.metodo_pago),
+  // Neto e IVA solo existen si ARCA autorizó el comprobante; en una cuenta cerrada con ticket
+  // quedan vacíos a propósito (poner 0 daría a entender que se facturó por cero).
+  neto: p.factura_id ? p.importe_neto : null,
+  iva: p.factura_id ? p.importe_iva : null,
+  total: p.total,
+});
+
+const armarResumen = (pedidos) => {
+  const totalVendido = pedidos.reduce((acc, p) => acc + Number(p.total), 0);
+  const facturados = pedidos.filter((p) => p.factura_id && p.factura_estado === 'aprobada');
+  // Las sillas de una misma mesa comparten sesion_apertura: esa combinación es "la cuenta".
+  const cuentas = new Set(pedidos.map((p) => `${p.mesa_id}|${p.sesion_apertura}`)).size;
+
+  return [
+    { label: 'Cuentas cerradas', valor: cuentas, tipo: 'numero' },
+    { label: 'Pedidos (sillas)', valor: pedidos.length, tipo: 'numero' },
+    { label: 'Total vendido', valor: totalVendido, tipo: 'moneda' },
+    { label: 'Promedio por cuenta', valor: cuentas ? totalVendido / cuentas : 0, tipo: 'moneda' },
+    { label: 'Neto facturado ante ARCA', valor: facturados.reduce((acc, p) => acc + Number(p.importe_neto || 0), 0), tipo: 'moneda' },
+    { label: 'IVA facturado ante ARCA', valor: facturados.reduce((acc, p) => acc + Number(p.importe_iva || 0), 0), tipo: 'moneda' },
+    ...desglose('Por método de pago', pedidos, (p) => etiqueta(METODO_PAGO_LABEL, p.metodo_pago, 'Sin registrar'), (p) => p.total),
+    ...desglose(
+      'Por estado de comprobante',
+      pedidos,
+      (p) => (p.factura_id ? etiqueta(ESTADO_FACTURA_LABEL, p.factura_estado) : 'Sin factura (ticket)'),
+      (p) => p.total
+    ),
+  ];
+};
+
+// Describe en texto los filtros aplicados, para que el archivo diga de qué recorte de datos salió.
+const describirFiltros = ({ desde, hasta, numero_mesa, metodo_pago, estado_factura, con_factura }) => {
+  const filtros = [];
+  if (desde) filtros.push({ label: 'Desde', valor: desde });
+  if (hasta) filtros.push({ label: 'Hasta', valor: hasta });
+  if (numero_mesa) filtros.push({ label: 'Mesa', valor: `Mesa ${numero_mesa}` });
+  if (metodo_pago) filtros.push({ label: 'Método de pago', valor: etiqueta(METODO_PAGO_LABEL, metodo_pago) });
+  if (con_factura) filtros.push({ label: 'Facturación ARCA', valor: con_factura === 'si' ? 'Con factura ARCA' : 'Sin factura (solo ticket)' });
+  if (estado_factura) filtros.push({ label: 'Estado comprobante', valor: etiqueta(ESTADO_FACTURA_LABEL, estado_factura) });
+  if (!filtros.length) filtros.push({ label: 'Filtros', valor: 'Ninguno (historial completo)' });
+  return filtros;
+};
+
+// Exporta el historial de cuentas cerradas que coincide con los filtros de la pantalla, en el
+// formato pedido (csv/xlsx/pdf/json). A diferencia de /historial, no pagina: el archivo trae todas
+// las filas que coinciden, con un tope de MAX_FILAS_REPORTE.
+const getReporte = async (req, res) => {
+  const { error, filtros } = validarFiltrosHistorial(req);
+  if (error) return res.status(400).json({ error });
+
+  const formato = req.query.formato || FORMATO_POR_DEFECTO;
+  if (!FORMATOS_VALIDOS.includes(formato))
+    return res.status(400).json({ error: `"formato" debe ser uno de: ${FORMATOS_VALIDOS.join(', ')}.` });
+
+  const incluirItems = req.query.incluir_items !== '0';
+
+  try {
+    const pedidos = await Pedido.getHistorialCompleto(filtros, MAX_FILAS_REPORTE);
+    if (pedidos.length > MAX_FILAS_REPORTE) {
+      return res.status(400).json({
+        error: `El reporte supera las ${MAX_FILAS_REPORTE} filas. Acotá el rango de fechas u otro filtro.`,
+      });
+    }
+
+    const hojas = [{ nombre: 'Ventas', columnas: COLUMNAS_VENTAS, filas: pedidos.map(filaVenta) }];
+
+    if (incluirItems && pedidos.length) {
+      const porId = new Map(pedidos.map((p) => [p.id, p]));
+      const items = await Pedido.getItemsByPedidoIds(pedidos.map((p) => p.id));
+      hojas.push({
+        nombre: 'Ítems',
+        columnas: COLUMNAS_ITEMS,
+        filas: items.map((it) => {
+          const pedido = porId.get(it.pedido_id);
+          return {
+            pedido_id: it.pedido_id,
+            mesa: pedido ? `Mesa ${pedido.numero_mesa}` : '',
+            fecha_cierre: pedido?.fecha_cierre ?? null,
+            producto: it.nombre,
+            cantidad: it.cantidad,
+            precio_unitario: it.precio_unitario,
+            subtotal: it.subtotal,
+          };
+        }),
+      });
+    }
+
+    const rango = filtros.desde || filtros.hasta
+      ? `Del ${filtros.desde || 'inicio'} al ${filtros.hasta || 'hoy'}`
+      : 'Historial completo';
+    const nombreBase = `historial-ventas-${filtros.desde || 'inicio'}_a_${filtros.hasta || 'hoy'}`;
+
+    await enviarReporte(res, {
+      titulo: 'Reporte de historial de ventas',
+      subtitulo: rango,
+      filtros: describirFiltros(filtros),
+      resumen: armarResumen(pedidos),
+      hojas,
+    }, formato, nombreBase);
+  } catch (err) {
+    logger.error(`${req.method} ${req.originalUrl} - ${err.message}`, { stack: err.stack });
+    // Si el generador ya empezó a escribir el archivo (pdf/xlsx hacen streaming) no se puede
+    // cambiar el status: se corta la respuesta y el navegador descarta la descarga.
+    if (res.headersSent) return res.end();
     res.status(500).json({ error: 'Error interno del servidor', detail: err.message });
   }
 };
@@ -413,7 +580,7 @@ const getEstadisticas = async (req, res) => {
 
   if (!TIPOS_ESTADISTICA_VALIDOS.includes(tipo))
     return res.status(400).json({ error: `"tipo" debe ser uno de: ${TIPOS_ESTADISTICA_VALIDOS.join(', ')}.` });
-  if (!FECHA_REGEX.test(fecha))
+  if (!esFechaISO(fecha))
     return res.status(400).json({ error: '"fecha" debe tener formato YYYY-MM-DD.' });
 
   try {
@@ -480,6 +647,7 @@ module.exports = {
   marcarItemEntregado,
   marcarPedidoEntregado,
   getHistorial,
+  getReporte,
   getEstadisticas,
   getOne,
 };
