@@ -1,9 +1,10 @@
 {
   "name": "sistema-chepola",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Sistema Chepola - API REST con Express",
   "main": "src/server.js",
   "scripts": {
+    "build": "npm install --include=dev --prefix frontend && npm run build --prefix frontend",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "dev:all": "concurrently -n API,WEB -c cyan,magenta \"npm run dev\" \"npm run dev --prefix frontend\""
